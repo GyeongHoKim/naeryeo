@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/GyeongHoKim/naeryeo/internal/config"
+	"github.com/GyeongHoKim/naeryeo/internal/core"
 )
 
 // version is overwritten via -ldflags at build time (see .goreleaser.yml).
@@ -29,7 +31,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "logout":
 		return runLogout(args[1:], stdout, stderr, config.Load, config.Delete)
 	case "route":
-		return notImplemented(stderr, "route")
+		return runRoute(args[1:], stdout, stderr, config.Load,
+			func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+				return core.NewClient(apiKey).FindRoute(ctx, from, to)
+			})
 	case "mcp":
 		return notImplemented(stderr, "mcp")
 	case "--version":

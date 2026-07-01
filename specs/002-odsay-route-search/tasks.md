@@ -32,7 +32,7 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 **Purpose**: 새 의존성 여부 확인 및 베이스라인 확인
 
-- [ ] T001 research.md §6에 따라 이 기능은 표준 라이브러리만 사용하며 새 모듈 의존성이
+- [X] T001 research.md §6에 따라 이 기능은 표준 라이브러리만 사용하며 새 모듈 의존성이
       필요 없음을 확인한다. 저장소 루트에서 `go build ./...`를 실행해 현재 베이스라인이
       정상 컴파일됨을 확인한다.
 
@@ -45,26 +45,26 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 **⚠️ CRITICAL**: 아래 태스크 완료 전까지 Phase 3 이후 착수 금지
 
-- [ ] T002 `internal/core/errors.go`를 새로 만들고 sentinel 에러(`ErrAPIKeyMissing`,
+- [X] T002 `internal/core/errors.go`를 새로 만들고 sentinel 에러(`ErrAPIKeyMissing`,
       `ErrAuthFailed`, `ErrNoRoute`, `ErrUpstreamUnavailable`)와 커스텀 타입
       (`ErrPointNotFound{Side, Name string}`, `ErrUpstreamRejected{Code, Message string}`,
       각각 `Error() string` 구현)을 정의한다. (data-model.md, contracts/core-package.md 참조)
-- [ ] T003 `internal/core/client.go`를 새로 만들고 `RouteQuery{From, To string}`,
+- [X] T003 `internal/core/client.go`를 새로 만들고 `RouteQuery{From, To string}`,
       `RouteResult{NoTravelNeeded bool; TotalTime, TransferCount, Fare int; Steps []RouteStep}`,
       `RouteStep{Description string}` 타입과 `Client{APIKey string; HTTPClient *http.Client;
       BaseURL string}` 구조체, `NewClient(apiKey string) *Client`(기본
       `BaseURL="https://api.odsay.com/v1/api"`, `HTTPClient`가 nil이면 10초 타임아웃의
       기본 클라이언트 사용)를 정의한다. (data-model.md 참조)
-- [ ] T004 [P] `internal/core/doc.go`의 placeholder 문구를 제거하고 실제 `Client`/
+- [X] T004 [P] `internal/core/doc.go`의 placeholder 문구를 제거하고 실제 `Client`/
       `FindRoute` 표면을 설명하도록 패키지 doc 주석을 갱신한다.
-- [ ] T005 `internal/core/client.go`에 ODsay 응답을 담을 비공개 JSON 구조체
+- [X] T005 `internal/core/client.go`에 ODsay 응답을 담을 비공개 JSON 구조체
       (`searchStation` 결과 목록, `searchPubTransPathT`의 `result.path[].info`/`subPath[]`
       필드, research.md §2 참조)와 공용 HTTP 헬퍼 `doGet(ctx context.Context, rawURL string,
       out any) error`를 구현한다: 네트워크 오류·타임아웃·비-2xx(401/403 제외)·JSON 디코드
       실패는 `ErrUpstreamUnavailable`로, HTTP 401/403은 `ErrAuthFailed`로 매핑한다
       (research.md §3 미확인 사항 — 실제 키로 추후 재검증 필요함을 코드 주석에 명시).
       (depends on T002, T003)
-- [ ] T006 `internal/core/client.go`에 ODsay 응답 바디의 에러 객체를 도메인 에러로 변환하는
+- [X] T006 `internal/core/client.go`에 ODsay 응답 바디의 에러 객체를 도메인 에러로 변환하는
       `classifyODsayError` 헬퍼를 구현한다: 코드 `3`→`&ErrPointNotFound{Side:"from"}`,
       `4`→`{Side:"to"}`, `5`→`{Side:"both"}`, `6`/`-99`→`ErrNoRoute`, `-98`→성공 경로에서
       `NoTravelNeeded` 판정에 쓰이는 특수 마커(에러 아님), `-8`/`-9`/그 외 미분류
@@ -88,37 +88,37 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 > **NOTE: 아래 테스트를 먼저 작성하고, 구현 전에는 실패(또는 컴파일 실패)함을 확인한다**
 
-- [ ] T007 [US1] `internal/core/client_test.go`를 새로 만들고 `httptest.Server`로
+- [X] T007 [US1] `internal/core/client_test.go`를 새로 만들고 `httptest.Server`로
       `searchStation`+`searchPubTransPathT`를 흉내 내는 테이블 테스트를 추가한다:
       (a) 정상 경로 — `RouteResult`의 `TotalTime`/`TransferCount`(지하철+버스 환승 합)/
       `Fare`/`Steps`가 올바르게 매핑됨, (b) 환승 없는 경로 — `TransferCount == 0`,
       (c) ODsay가 코드 `-98`을 반환 — `RouteResult{NoTravelNeeded: true}, nil`(에러 아님)
       을 검증한다.
-- [ ] T008 [P] [US1] `cmd/naeryeo/route_test.go`를 새로 만들고 `runRoute`에 가짜 `load`/
+- [X] T008 [P] [US1] `cmd/naeryeo/route_test.go`를 새로 만들고 `runRoute`에 가짜 `load`/
       `findRoute` 함수를 주입해 (a) 정상 결과가 소요시간/환승 횟수/요금/단계별 안내가 포함된
       README 스타일 출력으로 포매팅됨, (b) `NoTravelNeeded` 결과가 "이동이 필요 없습니다"
       류의 안내로 포매팅됨을 검증한다.
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] `internal/core/client.go`에 이름→좌표 변환
+- [X] T009 [US1] `internal/core/client.go`에 이름→좌표 변환
       `resolveStation(ctx context.Context, name string) (stationCoord, error)`를 구현한다
       (`searchStation` 호출 후 첫 후보를 채택; 후보 없음에 대한 에러 매핑은 US3에서 다룸).
       (depends on T005, T006)
-- [ ] T010 [US1] `internal/core/client.go`에 `(c *Client) FindRoute(ctx context.Context,
+- [X] T010 [US1] `internal/core/client.go`에 `(c *Client) FindRoute(ctx context.Context,
       from, to string) (RouteResult, error)`의 성공 경로를 구현한다: `resolveStation`으로
       두 지점 좌표 확인 → `searchPubTransPathT` 호출(`OPT=0`으로 대표 경로를 `path[0]`으로
       수신, FR-014) → `classifyODsayError`가 `-98` 마커를 반환하면
       `RouteResult{NoTravelNeeded: true}, nil`, 그 외 성공이면 `path[0]`을 `RouteResult`로
       매핑(`Steps`는 `subPath[]`를 순서대로 사람이 읽을 수 있는 문장으로 변환, 예:
       "강남역에서 2호선 승차 → 신도림역에서 하차"). (depends on T009)
-- [ ] T011 [P] [US1] 새 파일 `cmd/naeryeo/route.go`에 `runRoute(args []string, stdout,
+- [X] T011 [P] [US1] 새 파일 `cmd/naeryeo/route.go`에 `runRoute(args []string, stdout,
       stderr io.Writer, load func() (string, error), findRoute func(ctx context.Context,
       apiKey, from, to string) (core.RouteResult, error)) int`를 구현한다:
       `flag.NewFlagSet("route", flag.ContinueOnError)`로 `--from`/`--to` 파싱, `load()`로
       API 키 조회, `findRoute`를 호출해 성공/`NoTravelNeeded` 두 경우를 README 스타일
       (총 소요시간, 환승 횟수, 단계별 안내, 요금)로 출력한다.
-- [ ] T012 [US1] `cmd/naeryeo/main.go`의 `"route"` 분기를 `notImplemented(stderr, "route")`
+- [X] T012 [US1] `cmd/naeryeo/main.go`의 `"route"` 분기를 `notImplemented(stderr, "route")`
       대신 `runRoute(args[1:], stdout, stderr, config.Load, func(ctx context.Context, apiKey,
       from, to string) (core.RouteResult, error) { return core.NewClient(apiKey).FindRoute(ctx,
       from, to) })` 호출로 교체한다. (depends on T010, T011)
@@ -138,10 +138,10 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 ### Tests for User Story 2 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T013 [US2] `internal/core/client_test.go`에 (a) `apiKey == ""`로 `FindRoute` 호출 →
+- [X] T013 [US2] `internal/core/client_test.go`에 (a) `apiKey == ""`로 `FindRoute` 호출 →
       네트워크 호출이 전혀 발생하지 않고(핸들러 호출 카운터로 검증) `ErrAPIKeyMissing` 반환,
       (b) ODsay가 HTTP 401/403을 반환 → `ErrAuthFailed` 반환을 검증하는 테스트를 추가한다.
-- [ ] T014 [P] [US2] `cmd/naeryeo/route_test.go`에 (a) `load`가 `config.ErrNotConfigured`를
+- [X] T014 [P] [US2] `cmd/naeryeo/route_test.go`에 (a) `load`가 `config.ErrNotConfigured`를
       반환 → `findRoute`를 호출하지 않고(스파이 함수로 검증) "naeryeo setup을 먼저
       실행하세요" 안내와 0이 아닌 종료 코드, (b) `findRoute`가 `core.ErrAuthFailed`를 반환
       → "키 미설정"과는 다른 "저장된 API 키가 유효하지 않습니다" 안내와 0이 아닌 종료
@@ -149,10 +149,10 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] `internal/core/client.go`의 `FindRoute` 시작 부분에
+- [X] T015 [US2] `internal/core/client.go`의 `FindRoute` 시작 부분에
       `if c.APIKey == "" { return RouteResult{}, ErrAPIKeyMissing }` 가드를 네트워크 호출
       이전에 추가한다. (depends on T010)
-- [ ] T016 [US2] `cmd/naeryeo/route.go`의 `runRoute`에 에러 분기를 추가한다:
+- [X] T016 [US2] `cmd/naeryeo/route.go`의 `runRoute`에 에러 분기를 추가한다:
       `errors.Is(loadErr, config.ErrNotConfigured)`면 `findRoute` 호출 없이 setup 안내 후
       종료; `findRoute`가 반환한 에러가 `errors.Is(err, core.ErrAuthFailed)`면 "저장된 API
       키가 유효하지 않습니다" 안내로 응답. (depends on T011)
@@ -171,25 +171,25 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 ### Tests for User Story 3 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T017 [US3] `internal/core/client_test.go`에 (a) 코드 `3`/`4`/`5` →
+- [X] T017 [US3] `internal/core/client_test.go`에 (a) 코드 `3`/`4`/`5` →
       `ErrPointNotFound`의 `Side`가 각각 `"from"`/`"to"`/`"both"`, (b) 코드 `6`/`-99` →
       `ErrNoRoute`, (c) HTTP `500`/연결 거부/손상된 JSON → `ErrUpstreamUnavailable`,
       (d) 코드 `-8`/`-9`/미분류 코드 → `ErrUpstreamRejected`, (e) 짧은 데드라인의
       `context.Context`에 응답이 느린 핸들러(`time.Sleep`) → 무한 대기 없이 데드라인 근처
       에서 에러가 반환됨(테스트 자체에 별도 타임아웃 가드를 두어 행(hang) 여부를 판정)을
       검증하는 테스트를 추가한다.
-- [ ] T018 [P] [US3] `cmd/naeryeo/route_test.go`에 `findRoute`가 각각
+- [X] T018 [P] [US3] `cmd/naeryeo/route_test.go`에 `findRoute`가 각각
       `&core.ErrPointNotFound{Side:"from"}`(또는 `"to"`/`"both"`) / `core.ErrNoRoute` /
       `core.ErrUpstreamUnavailable`을 반환할 때 서로 다른 사용자 메시지와 0이 아닌 종료
       코드로 응답하는지 검증하는 테스트를 추가한다.
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] `internal/core/client.go`의 `resolveStation`이 빈 검색 결과(후보 없음)를
+- [X] T019 [US3] `internal/core/client.go`의 `resolveStation`이 빈 검색 결과(후보 없음)를
       `&ErrPointNotFound{Side: <호출 시점에 알 수 있는 from/to>}`로 매핑하도록 완성하고,
       `FindRoute`가 `classifyODsayError`(T006)의 결과를 그대로 호출자에게 전파하도록
       배선을 마무리한다. (depends on T006, T009)
-- [ ] T020 [US3] `cmd/naeryeo/route.go`의 `runRoute`에 `errors.As(err, &pointErr)`로
+- [X] T020 [US3] `cmd/naeryeo/route.go`의 `runRoute`에 `errors.As(err, &pointErr)`로
       `*core.ErrPointNotFound`를 잡아 `Side`별 안내("출발지"/"도착지"/"출발지와 도착지
       모두"를 찾을 수 없음), `errors.Is(err, core.ErrNoRoute)` 안내("두 지점 사이에 대중교통
       경로가 없습니다"), 그 외(`ErrUpstreamUnavailable`/`ErrUpstreamRejected`)에 대한 일반
@@ -203,16 +203,16 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 **Purpose**: 스토리 전반에 걸친 마무리 및 미확인 사항 해소
 
-- [ ] T021 [P] 저장소 루트에서 `just fmt`, `just lint`, `just test`(`just check`)를 실행하고
+- [X] T021 [P] 저장소 루트에서 `just fmt`, `just lint`, `just test`(`just check`)를 실행하고
       발견된 문제를 모두 수정한다(constitution Principle III).
-- [ ] T022 [P] `cmd/naeryeo/route.go`의 실제 출력 문구를 `README.md`의 `naeryeo route`
+- [X] T022 [P] `cmd/naeryeo/route.go`의 실제 출력 문구를 `README.md`의 `naeryeo route`
       예시(총 소요시간·환승 횟수·단계별 안내·요금 형식)와 비교해 맞춘다.
 - [ ] T023 실제 발급받은 ODsay API 키로 `go run ./cmd/naeryeo route --from ... --to ...`를
       수동 실행해 `specs/002-odsay-route-search/quickstart.md` §2의 시나리오(정상 경로,
       동일 지점, 존재하지 않는 지점)를 검증한다. 특히 T005/T015에서 가정한 "HTTP 401/403 →
       인증 실패" 매핑이 실제 ODsay 동작과 일치하는지 확인하고, 다르면 `classifyODsayError`/
       `doGet`을 실제 신호에 맞게 수정한다(research.md §3 미확인 사항 해소).
-- [ ] T024 커밋 제안 전, constitution Principle I(idiomatic Go)과 Principle II(테스트
+- [X] T024 커밋 제안 전, constitution Principle I(idiomatic Go)과 Principle II(테스트
       커버리지)를 기준으로 변경분을 자체 리뷰한다(AGENTS.md Required Workflow 5단계).
 
 ---
