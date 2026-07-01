@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -10,6 +12,8 @@ import (
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+var discardLogger = slog.New(slog.DiscardHandler)
 
 // connectTestClient wires an in-memory MCP client-server pair around
 // server, mirroring the pattern used by the SDK's own examples
@@ -81,7 +85,7 @@ func TestFindTransitRouteTool_Success(t *testing.T) {
 		}, nil
 	}
 
-	server := buildMCPServer("test", load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, findRoute)
 	session := connectTestClient(t, server)
 
 	res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -104,7 +108,7 @@ func TestFindTransitRouteTool_NoTravelNeeded(t *testing.T) {
 		return core.RouteResult{NoTravelNeeded: true}, nil
 	}
 
-	server := buildMCPServer("test", load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, findRoute)
 	session := connectTestClient(t, server)
 
 	res := callFindTransitRoute(t, session, "강남역", "강남역")
@@ -125,7 +129,7 @@ func TestFindTransitRouteTool_ConsecutiveCalls(t *testing.T) {
 		return core.RouteResult{TotalTime: calls, Fare: calls * 100}, nil
 	}
 
-	server := buildMCPServer("test", load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, findRoute)
 	session := connectTestClient(t, server)
 
 	first := decodeRouteToolOutput(t, callFindTransitRoute(t, session, "A", "B"))
@@ -146,7 +150,7 @@ func TestFindTransitRouteTool_APIKeyProblems(t *testing.T) {
 			return core.NewClient(apiKey).FindRoute(ctx, from, to)
 		}
 
-		server := buildMCPServer("test", load, findRoute)
+		server := buildMCPServer("test", discardLogger, load, findRoute)
 		session := connectTestClient(t, server)
 
 		res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -164,7 +168,7 @@ func TestFindTransitRouteTool_APIKeyProblems(t *testing.T) {
 			return core.RouteResult{}, core.ErrAuthFailed
 		}
 
-		server := buildMCPServer("test", load, findRoute)
+		server := buildMCPServer("test", discardLogger, load, findRoute)
 		session := connectTestClient(t, server)
 
 		res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -206,7 +210,7 @@ func TestFindTransitRouteTool_PointAndRouteErrors(t *testing.T) {
 				return core.RouteResult{}, tt.findErr
 			}
 
-			server := buildMCPServer("test", load, findRoute)
+			server := buildMCPServer("test", discardLogger, load, findRoute)
 			session := connectTestClient(t, server)
 
 			res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -233,7 +237,7 @@ func TestFindTransitRouteTool_UpstreamFailureThenRecovery(t *testing.T) {
 		return core.RouteResult{TotalTime: 10}, nil
 	}
 
-	server := buildMCPServer("test", load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, findRoute)
 	session := connectTestClient(t, server)
 
 	failed := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -249,5 +253,28 @@ func TestFindTransitRouteTool_UpstreamFailureThenRecovery(t *testing.T) {
 	out := decodeRouteToolOutput(t, recovered)
 	if out.TotalTimeMinutes != 10 {
 		t.Errorf("TotalTimeMinutes = %d, want 10", out.TotalTimeMinutes)
+	}
+}
+
+func TestFindTransitRouteTool_LogsToolCall(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+
+	load := func() (string, error) { return "test-key", nil }
+	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+		return core.RouteResult{TotalTime: 5}, nil
+	}
+
+	server := buildMCPServer("test", logger, load, findRoute)
+	session := connectTestClient(t, server)
+
+	callFindTransitRoute(t, session, "강남역", "홍대입구역")
+
+	logged := buf.String()
+	if !strings.Contains(logged, `"tool":"find_transit_route"`) {
+		t.Errorf("log output = %q, want a find_transit_route tool call record", logged)
+	}
+	if !strings.Contains(logged, `"from":"강남역"`) || !strings.Contains(logged, `"to":"홍대입구역"`) {
+		t.Errorf("log output = %q, want from/to attributes", logged)
 	}
 }

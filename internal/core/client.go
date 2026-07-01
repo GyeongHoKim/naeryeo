@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -108,6 +109,17 @@ type laneInfo struct {
 // signal ODsay uses for an invalid API key is unconfirmed; this is the
 // best-effort mapping to verify against a real key, see tasks.md T023).
 func (c *Client) doGet(ctx context.Context, rawURL string, out any) (err error) {
+	start := time.Now()
+	statusCode := 0
+	defer func() {
+		c.logger().Debug("core: HTTP GET",
+			"url", redactURL(rawURL),
+			"status", statusCode,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"error", err,
+		)
+	}()
+
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if reqErr != nil {
 		return fmt.Errorf("%w: %w", ErrUpstreamUnavailable, reqErr)
@@ -117,6 +129,7 @@ func (c *Client) doGet(ctx context.Context, rawURL string, out any) (err error) 
 	if doErr != nil {
 		return fmt.Errorf("%w: %w", ErrUpstreamUnavailable, doErr)
 	}
+	statusCode = resp.StatusCode
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil && err == nil {
 			err = fmt.Errorf("%w: %w", ErrUpstreamUnavailable, cerr)
@@ -139,10 +152,12 @@ func (c *Client) doGet(ctx context.Context, rawURL string, out any) (err error) 
 // classifyODsayError maps an ODsay error object (research.md §3's code
 // table) onto this package's domain errors. from/to fill in
 // ErrPointNotFound.Name. It returns nil if body is nil (no error).
-func classifyODsayError(body *odsayErrorBody, from, to string) error {
+func (c *Client) classifyODsayError(body *odsayErrorBody, from, to string) error {
 	if body == nil {
 		return nil
 	}
+	c.logger().Warn("core: ODsay rejected request",
+		"code", string(body.Code), "message", body.Message, "from", from, "to", to)
 	switch string(body.Code) {
 	case "3":
 		return &ErrPointNotFound{Side: "from", Name: from}
@@ -185,6 +200,10 @@ type Client struct {
 	// BaseURL overrides the ODsay API base URL. If empty, defaultBaseURL is
 	// used. Tests substitute an httptest.Server URL here.
 	BaseURL string
+	// Logger receives diagnostic logs (redacted URLs, HTTP status, ODsay
+	// error codes, search outcomes). If nil, logging is discarded. Never
+	// logs c.APIKey.
+	Logger *slog.Logger
 }
 
 // NewClient returns a Client configured to authenticate with apiKey.
@@ -217,14 +236,19 @@ func (c *Client) resolveStation(ctx context.Context, name string) (stationCandid
 	if err := c.doGet(ctx, u, &resp); err != nil {
 		return stationCandidate{}, err
 	}
-	if err := classifyODsayError(resp.Error, name, name); err != nil {
+	if err := c.classifyODsayError(resp.Error, name, name); err != nil {
 		if errors.Is(err, errNoTravelNeeded) {
 			// -98 is meaningless for a single-point lookup; treat as not found.
 			return stationCandidate{}, errStationNotFound
 		}
 		return stationCandidate{}, err
 	}
-	if resp.Result == nil || len(resp.Result.Station) == 0 {
+	candidateCount := 0
+	if resp.Result != nil {
+		candidateCount = len(resp.Result.Station)
+	}
+	c.logger().Debug("core: station search", "name", name, "candidates", candidateCount)
+	if candidateCount == 0 {
 		return stationCandidate{}, errStationNotFound
 	}
 	return resp.Result.Station[0], nil
@@ -233,7 +257,16 @@ func (c *Client) resolveStation(ctx context.Context, name string) (stationCandid
 // FindRoute searches for the representative transit route between from and
 // to. It returns ErrAPIKeyMissing without making any network call if the
 // client has no API key configured (FR-007).
-func (c *Client) FindRoute(ctx context.Context, from, to string) (RouteResult, error) {
+func (c *Client) FindRoute(ctx context.Context, from, to string) (result RouteResult, err error) {
+	start := time.Now()
+	defer func() {
+		c.logger().Info("core: route search",
+			"from", from, "to", to,
+			"outcome", routeOutcome(result, err),
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+	}()
+
 	if c.APIKey == "" {
 		return RouteResult{}, ErrAPIKeyMissing
 	}
@@ -260,7 +293,7 @@ func (c *Client) FindRoute(ctx context.Context, from, to string) (RouteResult, e
 	if err := c.doGet(ctx, u, &resp); err != nil {
 		return RouteResult{}, err
 	}
-	if err := classifyODsayError(resp.Error, from, to); err != nil {
+	if err := c.classifyODsayError(resp.Error, from, to); err != nil {
 		if errors.Is(err, errNoTravelNeeded) {
 			return RouteResult{NoTravelNeeded: true}, nil
 		}

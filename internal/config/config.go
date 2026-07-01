@@ -75,9 +75,16 @@ func wrapBackendErr(err error) error {
 // to plaintext storage if the keychain backend is unavailable.
 func Save(apiKey string) error {
 	if apiKey == "" {
+		logger.Warn("config: save rejected: empty API key")
 		return ErrEmptyValue
 	}
-	return wrapBackendErr(backend.Set(serviceName, keyUsername, apiKey))
+	err := wrapBackendErr(backend.Set(serviceName, keyUsername, apiKey))
+	if err != nil {
+		logger.Error("config: save failed", "error", err)
+		return err
+	}
+	logger.Info("config: API key saved")
+	return nil
 }
 
 // Load returns the previously stored API key. It returns ErrNotConfigured
@@ -85,8 +92,15 @@ func Save(apiKey string) error {
 func Load() (string, error) {
 	value, err := backend.Get(serviceName, keyUsername)
 	if err != nil {
-		return "", wrapBackendErr(err)
+		wrapped := wrapBackendErr(err)
+		if errors.Is(wrapped, ErrNotConfigured) {
+			logger.Info("config: no API key stored")
+		} else {
+			logger.Error("config: load failed", "error", wrapped)
+		}
+		return "", wrapped
 	}
+	logger.Debug("config: API key loaded")
 	return value, nil
 }
 
@@ -95,7 +109,14 @@ func Load() (string, error) {
 func Delete() error {
 	err := backend.Delete(serviceName, keyUsername)
 	if errors.Is(err, keyring.ErrNotFound) {
+		logger.Info("config: delete: no API key was stored")
 		return nil
 	}
-	return wrapBackendErr(err)
+	wrapped := wrapBackendErr(err)
+	if wrapped != nil {
+		logger.Error("config: delete failed", "error", wrapped)
+		return wrapped
+	}
+	logger.Info("config: API key deleted")
+	return nil
 }
