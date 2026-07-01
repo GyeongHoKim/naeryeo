@@ -93,6 +93,8 @@ type pathCandidate struct {
 
 type subPathSegment struct {
 	TrafficType int        `json:"trafficType"`
+	Distance    float64    `json:"distance"`
+	SectionTime int        `json:"sectionTime"`
 	StartName   string     `json:"startName"`
 	EndName     string     `json:"endName"`
 	Lane        []laneInfo `json:"lane"`
@@ -324,13 +326,72 @@ func describeSubPath(sp subPathSegment) string {
 	if len(sp.Lane) > 0 {
 		laneName = sp.Lane[0].Name
 	}
+	startName := strings.TrimSpace(sp.StartName)
+	endName := strings.TrimSpace(sp.EndName)
 
 	switch sp.TrafficType {
 	case 1: // subway
-		return fmt.Sprintf("%s에서 %s 승차 → %s에서 하차", sp.StartName, laneName, sp.EndName)
+		return fmt.Sprintf("%s에서 %s 승차 → %s에서 하차", startName, laneName, endName)
 	case 2: // bus
-		return fmt.Sprintf("%s에서 %s 버스 승차 → %s에서 하차", sp.StartName, laneName, sp.EndName)
+		return fmt.Sprintf("%s에서 %s 버스 승차 → %s에서 하차", startName, laneName, endName)
+	case 3: // walk
+		return describeWalkSubPath(sp, startName, endName)
 	default:
-		return fmt.Sprintf("%s에서 %s까지 이동", sp.StartName, sp.EndName)
+		return describeGenericSubPath(sp, startName, endName)
+	}
+}
+
+func describeWalkSubPath(sp subPathSegment, startName, endName string) string {
+	switch {
+	case startName != "" && endName != "":
+		return fmt.Sprintf("%s에서 %s까지 도보 이동%s", startName, endName, segmentDetail(sp))
+	case startName != "":
+		return fmt.Sprintf("%s에서 도보 이동%s", startName, segmentDetail(sp))
+	case endName != "":
+		return fmt.Sprintf("%s까지 도보 이동%s", endName, segmentDetail(sp))
+	default:
+		return "도보" + movementSummary(sp)
+	}
+}
+
+func describeGenericSubPath(sp subPathSegment, startName, endName string) string {
+	switch {
+	case startName != "" && endName != "":
+		return fmt.Sprintf("%s에서 %s까지 이동%s", startName, endName, segmentDetail(sp))
+	case startName != "":
+		return fmt.Sprintf("%s에서 이동%s", startName, segmentDetail(sp))
+	case endName != "":
+		return fmt.Sprintf("%s까지 이동%s", endName, segmentDetail(sp))
+	default:
+		return "이동" + movementSummary(sp)
+	}
+}
+
+func segmentDetail(sp subPathSegment) string {
+	distance := int(sp.Distance + 0.5)
+	details := make([]string, 0, 2)
+	if sp.SectionTime > 0 {
+		details = append(details, fmt.Sprintf("%d분", sp.SectionTime))
+	}
+	if distance > 0 {
+		details = append(details, fmt.Sprintf("%dm", distance))
+	}
+	if len(details) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(details, ", ") + ")"
+}
+
+func movementSummary(sp subPathSegment) string {
+	distance := int(sp.Distance + 0.5)
+	switch {
+	case sp.SectionTime > 0 && distance > 0:
+		return fmt.Sprintf(" %d분 이동 (%dm)", sp.SectionTime, distance)
+	case sp.SectionTime > 0:
+		return fmt.Sprintf(" %d분 이동", sp.SectionTime)
+	case distance > 0:
+		return fmt.Sprintf(" %dm 이동", distance)
+	default:
+		return " 이동"
 	}
 }

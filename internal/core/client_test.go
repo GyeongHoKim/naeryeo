@@ -62,8 +62,10 @@ func TestFindRoute_Success(t *testing.T) {
 			Path []pathCandidate `json:"path"`
 		}{Path: []pathCandidate{{
 			SubPath: []subPathSegment{
+				{TrafficType: 3, Distance: 120, SectionTime: 2},
 				{TrafficType: 1, StartName: "강남역", EndName: "신도림역", Lane: []laneInfo{{Name: "2호선"}}},
 				{TrafficType: 1, StartName: "신도림역", EndName: "홍대입구역", Lane: []laneInfo{{Name: "경의중앙선"}}},
+				{TrafficType: 3, Distance: 80, SectionTime: 1},
 			},
 		}}}}
 		resp.Result.Path[0].Info.TotalTime = 42
@@ -91,11 +93,19 @@ func TestFindRoute_Success(t *testing.T) {
 	if got.TransferCount != 1 {
 		t.Errorf("TransferCount = %d, want 1", got.TransferCount)
 	}
-	if len(got.Steps) != 2 {
-		t.Fatalf("len(Steps) = %d, want 2", len(got.Steps))
+	if len(got.Steps) != 4 {
+		t.Fatalf("len(Steps) = %d, want 4", len(got.Steps))
 	}
-	if got.Steps[0].Description == "" {
-		t.Error("Steps[0].Description is empty")
+	wantSteps := []string{
+		"도보 2분 이동 (120m)",
+		"강남역에서 2호선 승차 → 신도림역에서 하차",
+		"신도림역에서 경의중앙선 승차 → 홍대입구역에서 하차",
+		"도보 1분 이동 (80m)",
+	}
+	for i, want := range wantSteps {
+		if got.Steps[i].Description != want {
+			t.Errorf("Steps[%d].Description = %q, want %q", i, got.Steps[i].Description, want)
+		}
 	}
 }
 

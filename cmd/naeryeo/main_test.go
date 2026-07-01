@@ -87,3 +87,15 @@ func TestNewLogger_FormatByCommand(t *testing.T) {
 		t.Errorf("route logger output = %q, want text, not JSON", buf.String())
 	}
 }
+
+func TestNewLogger_CLIDefaultIsQuiet(t *testing.T) {
+	var buf bytes.Buffer
+
+	logger := newLogger([]string{"route"}, &buf, "")
+	logger.Info("test")
+	logger.Error("test")
+
+	if buf.Len() != 0 {
+		t.Errorf("CLI logger output with unset NAERYEO_LOG_LEVEL = %q, want empty", buf.String())
+	}
+}

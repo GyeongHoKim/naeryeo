@@ -23,19 +23,26 @@ func main() {
 // newLogger builds the process-wide logger. It always writes to w (stderr
 // in production) — stdout is reserved for user-facing CLI output and, for
 // the mcp subcommand, the MCP JSON-RPC stream itself, so logs must never go
-// there. Output is JSON for the mcp subcommand (consumed by Claude
-// Desktop/Code's log capture or other tooling) and human-readable text
-// otherwise. level defaults to Info if unset or unparseable.
+// there. CLI logs are quiet by default unless NAERYEO_LOG_LEVEL is set.
+// MCP logs default to Info because stderr is captured by the MCP host.
 func newLogger(args []string, w io.Writer, level string) *slog.Logger {
+	if strings.TrimSpace(level) == "" && !isMCPCommand(args) {
+		return slog.New(slog.DiscardHandler)
+	}
+
 	opts := &slog.HandlerOptions{Level: parseLogLevel(level)}
 
 	var handler slog.Handler
-	if len(args) > 0 && args[0] == "mcp" {
+	if isMCPCommand(args) {
 		handler = slog.NewJSONHandler(w, opts)
 	} else {
 		handler = slog.NewTextHandler(w, opts)
 	}
 	return slog.New(handler)
+}
+
+func isMCPCommand(args []string) bool {
+	return len(args) > 0 && args[0] == "mcp"
 }
 
 // parseLogLevel parses NAERYEO_LOG_LEVEL, defaulting to Info.
