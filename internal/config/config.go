@@ -7,9 +7,21 @@ import (
 	"github.com/zalando/go-keyring"
 )
 
+const serviceName = "naeryeo"
+
+// Credential identifies which stored API key an operation targets. Its value
+// is used as the OS keychain "username" under the shared service name, so the
+// two credentials live as independent keychain entries.
+type Credential string
+
 const (
-	serviceName = "naeryeo"
-	keyUsername = "odsay-api-key"
+	// ODsayAPIKey is the transit route-search key. Its value is unchanged
+	// from the original single-key implementation so existing users' stored
+	// keys continue to load without any migration.
+	ODsayAPIKey Credential = "odsay-api-key"
+	// GeocoderAPIKey is the place-search (geocoding) key used to resolve
+	// building names and addresses that ODsay's station search cannot.
+	GeocoderAPIKey Credential = "geocoder-api-key"
 )
 
 var (
@@ -70,53 +82,53 @@ func wrapBackendErr(err error) error {
 	}
 }
 
-// Save stores apiKey in the OS keychain, overwriting any previously stored
-// value. It returns ErrEmptyValue if apiKey is empty and never falls back
-// to plaintext storage if the keychain backend is unavailable.
-func Save(apiKey string) error {
+// Save stores apiKey for cred in the OS keychain, overwriting any previously
+// stored value. It returns ErrEmptyValue if apiKey is empty and never falls
+// back to plaintext storage if the keychain backend is unavailable.
+func Save(cred Credential, apiKey string) error {
 	if apiKey == "" {
-		logger.Warn("config: save rejected: empty API key")
+		logger.Warn("config: save rejected: empty API key", "credential", string(cred))
 		return ErrEmptyValue
 	}
-	err := wrapBackendErr(backend.Set(serviceName, keyUsername, apiKey))
+	err := wrapBackendErr(backend.Set(serviceName, string(cred), apiKey))
 	if err != nil {
-		logger.Error("config: save failed", "error", err)
+		logger.Error("config: save failed", "credential", string(cred), "error", err)
 		return err
 	}
-	logger.Info("config: API key saved")
+	logger.Info("config: API key saved", "credential", string(cred))
 	return nil
 }
 
-// Load returns the previously stored API key. It returns ErrNotConfigured
-// if no key has been stored.
-func Load() (string, error) {
-	value, err := backend.Get(serviceName, keyUsername)
+// Load returns the previously stored API key for cred. It returns
+// ErrNotConfigured if no key has been stored for that credential.
+func Load(cred Credential) (string, error) {
+	value, err := backend.Get(serviceName, string(cred))
 	if err != nil {
 		wrapped := wrapBackendErr(err)
 		if errors.Is(wrapped, ErrNotConfigured) {
-			logger.Info("config: no API key stored")
+			logger.Info("config: no API key stored", "credential", string(cred))
 		} else {
-			logger.Error("config: load failed", "error", wrapped)
+			logger.Error("config: load failed", "credential", string(cred), "error", wrapped)
 		}
 		return "", wrapped
 	}
-	logger.Debug("config: API key loaded")
+	logger.Debug("config: API key loaded", "credential", string(cred))
 	return value, nil
 }
 
-// Delete removes the stored API key. It is idempotent: calling it when no
-// key is stored is not an error.
-func Delete() error {
-	err := backend.Delete(serviceName, keyUsername)
+// Delete removes the stored API key for cred. It is idempotent: calling it
+// when no key is stored is not an error.
+func Delete(cred Credential) error {
+	err := backend.Delete(serviceName, string(cred))
 	if errors.Is(err, keyring.ErrNotFound) {
-		logger.Info("config: delete: no API key was stored")
+		logger.Info("config: delete: no API key was stored", "credential", string(cred))
 		return nil
 	}
 	wrapped := wrapBackendErr(err)
 	if wrapped != nil {
-		logger.Error("config: delete failed", "error", wrapped)
+		logger.Error("config: delete failed", "credential", string(cred), "error", wrapped)
 		return wrapped
 	}
-	logger.Info("config: API key deleted")
+	logger.Info("config: API key deleted", "credential", string(cred))
 	return nil
 }

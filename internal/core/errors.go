@@ -18,6 +18,25 @@ var (
 	// ErrUpstreamUnavailable indicates a network error, timeout, or ODsay
 	// server-side failure.
 	ErrUpstreamUnavailable = errors.New("core: ODsay is unavailable")
+	// ErrGeocoderAuthFailed indicates the geocoder fallback rejected the
+	// place-search API key as unauthenticated. It is kept distinct from
+	// ErrPointNotFound so callers can tell "the place-search key is invalid"
+	// apart from "the name matched nothing".
+	ErrGeocoderAuthFailed = errors.New("core: geocoder rejected the API key")
+	// ErrGeocoderNotFound is the not-found signal a Geocoder returns when a
+	// name matches no place. resolveStation folds it into the same
+	// "unrecognized point" handling as a failed station search.
+	//
+	// ErrGeocoderNotFound, ErrGeocoderAuthFailed, and ErrGeocoderUnavailable
+	// make up the error contract of the Geocoder interface. They live here,
+	// in the consuming package, alongside the interface and Coordinate type,
+	// so a Geocoder implementation depends only on core (one-way) and core
+	// can classify its result via errors.Is without importing the
+	// implementation — avoiding an import cycle.
+	ErrGeocoderNotFound = errors.New("core: geocoder found no matching place")
+	// ErrGeocoderUnavailable indicates a network error, timeout, non-2xx
+	// status, or unparseable response from the geocoder.
+	ErrGeocoderUnavailable = errors.New("core: geocoder is unavailable")
 )
 
 // ErrPointNotFound indicates the from and/or to location name could not be

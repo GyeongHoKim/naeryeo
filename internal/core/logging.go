@@ -54,6 +54,10 @@ func routeOutcome(result RouteResult, err error) string {
 		return "auth_failed"
 	case errors.Is(err, ErrNoRoute):
 		return "no_route"
+	case errors.Is(err, ErrGeocoderAuthFailed):
+		return "geocoder_auth_failed"
+	case errors.Is(err, ErrGeocoderUnavailable):
+		return "geocoder_unavailable"
 	case errors.Is(err, ErrUpstreamUnavailable):
 		return "upstream_unavailable"
 	case errors.As(err, &pointErr):

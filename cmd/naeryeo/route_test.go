@@ -10,6 +10,11 @@ import (
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 )
 
+// loadGeoPresent / loadGeoAbsent are the two geocoder-key states the route
+// entry point branches on for the FR-007 hint.
+func loadGeoPresent() (string, error) { return "kakao-key", nil }
+func loadGeoAbsent() (string, error)  { return "", config.ErrNotConfigured }
+
 func TestRunRoute_Success(t *testing.T) {
 	load := func() (string, error) { return "test-key", nil }
 	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
@@ -25,7 +30,7 @@ func TestRunRoute_Success(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
 
 	if code != 0 {
 		t.Fatalf("runRoute() code = %d, want 0; stderr = %q", code, stderr.String())
@@ -36,6 +41,66 @@ func TestRunRoute_Success(t *testing.T) {
 			t.Errorf("stdout = %q, want substring %q", out, want)
 		}
 	}
+}
+
+func TestRouteErrorMessage(t *testing.T) {
+	const hint = "setup --geocoder"
+
+	t.Run("point not found without geocoder appends the FR-007 hint", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"}, false)
+		if !strings.Contains(msg, "출발지") {
+			t.Errorf("msg = %q, want it to name the from side", msg)
+		}
+		if !strings.Contains(msg, hint) {
+			t.Errorf("msg = %q, want the FR-007 hint %q", msg, hint)
+		}
+	})
+
+	t.Run("point not found with geocoder omits the hint", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrPointNotFound{Side: "to", Name: "아이디스 타워"}, true)
+		if strings.Contains(msg, hint) {
+			t.Errorf("msg = %q, should not append the hint when a geocoder key exists", msg)
+		}
+	})
+
+	t.Run("geocoder auth failure has its own message regardless of configured flag", func(t *testing.T) {
+		for _, configured := range []bool{true, false} {
+			msg := routeErrorMessage(core.ErrGeocoderAuthFailed, configured)
+			if !strings.Contains(msg, "장소 검색 키가 유효하지 않습니다") {
+				t.Errorf("msg = %q, want the geocoder auth-failed message", msg)
+			}
+		}
+	})
+
+	t.Run("geocoder unavailable has a distinct message", func(t *testing.T) {
+		msg := routeErrorMessage(core.ErrGeocoderUnavailable, true)
+		if !strings.Contains(msg, "장소 검색 서비스에 연결할 수 없습니다") {
+			t.Errorf("msg = %q, want the geocoder-unavailable message", msg)
+		}
+	})
+}
+
+func TestRunRoute_FR007Hint(t *testing.T) {
+	findNotFound := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+		return core.RouteResult{}, &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"}
+	}
+	load := func() (string, error) { return "test-key", nil }
+
+	t.Run("no geocoder key -> hint shown", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, load, loadGeoAbsent, findNotFound)
+		if !strings.Contains(stderr.String(), "setup --geocoder") {
+			t.Errorf("stderr = %q, want the FR-007 hint", stderr.String())
+		}
+	})
+
+	t.Run("geocoder key present -> hint omitted", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, load, loadGeoPresent, findNotFound)
+		if strings.Contains(stderr.String(), "setup --geocoder") {
+			t.Errorf("stderr = %q, should not show the hint when a geocoder key exists", stderr.String())
+		}
+	})
 }
 
 func TestWithThousandsSeparator(t *testing.T) {
@@ -63,7 +128,7 @@ func TestRunRoute_NoTravelNeeded(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "강남역"}, &stdout, &stderr, load, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
 
 	if code != 0 {
 		t.Fatalf("runRoute() code = %d, want 0; stderr = %q", code, stderr.String())
@@ -82,7 +147,7 @@ func TestRunRoute_MissingFlags(t *testing.T) {
 	load := func() (string, error) { return "test-key", nil }
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역"}, &stdout, &stderr, load, findRoute)
+	code := runRoute([]string{"--from", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
 
 	if code == 0 {
 		t.Fatal("runRoute() code = 0, want non-zero")
@@ -101,7 +166,7 @@ func TestRunRoute_APIKeyNotConfigured(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
 
 	if code == 0 {
 		t.Fatal("runRoute() code = 0, want non-zero")
@@ -121,7 +186,7 @@ func TestRunRoute_AuthFailedIsDistinctFromMissingKey(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
 
 	if code == 0 {
 		t.Fatal("runRoute() code = 0, want non-zero")
@@ -166,7 +231,7 @@ func TestRunRoute_ErrorMessages(t *testing.T) {
 			}
 
 			var stdout, stderr bytes.Buffer
-			code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, findRoute)
+			code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
 
 			if code == 0 {
 				t.Fatal("runRoute() code = 0, want non-zero")

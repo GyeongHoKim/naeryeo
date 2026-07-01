@@ -85,7 +85,7 @@ func TestFindTransitRouteTool_Success(t *testing.T) {
 		}, nil
 	}
 
-	server := buildMCPServer("test", discardLogger, load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 	session := connectTestClient(t, server)
 
 	res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -108,7 +108,7 @@ func TestFindTransitRouteTool_NoTravelNeeded(t *testing.T) {
 		return core.RouteResult{NoTravelNeeded: true}, nil
 	}
 
-	server := buildMCPServer("test", discardLogger, load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 	session := connectTestClient(t, server)
 
 	res := callFindTransitRoute(t, session, "강남역", "강남역")
@@ -129,7 +129,7 @@ func TestFindTransitRouteTool_ConsecutiveCalls(t *testing.T) {
 		return core.RouteResult{TotalTime: calls, Fare: calls * 100}, nil
 	}
 
-	server := buildMCPServer("test", discardLogger, load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 	session := connectTestClient(t, server)
 
 	first := decodeRouteToolOutput(t, callFindTransitRoute(t, session, "A", "B"))
@@ -150,7 +150,7 @@ func TestFindTransitRouteTool_APIKeyProblems(t *testing.T) {
 			return core.NewClient(apiKey).FindRoute(ctx, from, to)
 		}
 
-		server := buildMCPServer("test", discardLogger, load, findRoute)
+		server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 		session := connectTestClient(t, server)
 
 		res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -168,7 +168,7 @@ func TestFindTransitRouteTool_APIKeyProblems(t *testing.T) {
 			return core.RouteResult{}, core.ErrAuthFailed
 		}
 
-		server := buildMCPServer("test", discardLogger, load, findRoute)
+		server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 		session := connectTestClient(t, server)
 
 		res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -210,7 +210,7 @@ func TestFindTransitRouteTool_PointAndRouteErrors(t *testing.T) {
 				return core.RouteResult{}, tt.findErr
 			}
 
-			server := buildMCPServer("test", discardLogger, load, findRoute)
+			server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 			session := connectTestClient(t, server)
 
 			res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -237,7 +237,7 @@ func TestFindTransitRouteTool_UpstreamFailureThenRecovery(t *testing.T) {
 		return core.RouteResult{TotalTime: 10}, nil
 	}
 
-	server := buildMCPServer("test", discardLogger, load, findRoute)
+	server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
 	session := connectTestClient(t, server)
 
 	failed := callFindTransitRoute(t, session, "강남역", "홍대입구역")
@@ -256,6 +256,46 @@ func TestFindTransitRouteTool_UpstreamFailureThenRecovery(t *testing.T) {
 	}
 }
 
+// TestFindTransitRouteTool_GeocoderMessagesMatchCLI verifies the MCP tool
+// produces the exact same geocoder-related wording as the CLI, since both go
+// through the shared routeErrorMessage (spec 004 FR-011).
+func TestFindTransitRouteTool_GeocoderMessagesMatchCLI(t *testing.T) {
+	load := func() (string, error) { return "test-key", nil }
+
+	t.Run("point-not-found without geocoder shows the shared FR-007 hint", func(t *testing.T) {
+		findErr := &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"}
+		findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+			return core.RouteResult{}, findErr
+		}
+		server := buildMCPServer("test", discardLogger, load, loadGeoAbsent, findRoute)
+		session := connectTestClient(t, server)
+
+		res := callFindTransitRoute(t, session, "아이디스 타워", "수지구청")
+		if !res.IsError {
+			t.Fatal("IsError = false, want true")
+		}
+		if want := routeErrorMessage(findErr, false); !strings.Contains(resultText(res), want) {
+			t.Errorf("MCP content = %q, want it to contain the shared message %q", resultText(res), want)
+		}
+	})
+
+	t.Run("geocoder auth failure has the distinct place-search-key message", func(t *testing.T) {
+		findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+			return core.RouteResult{}, core.ErrGeocoderAuthFailed
+		}
+		server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
+		session := connectTestClient(t, server)
+
+		res := callFindTransitRoute(t, session, "아이디스 타워", "수지구청")
+		if !res.IsError {
+			t.Fatal("IsError = false, want true")
+		}
+		if !strings.Contains(resultText(res), "장소 검색 키가 유효하지 않습니다") {
+			t.Errorf("content = %q, want the geocoder auth-failed message", resultText(res))
+		}
+	})
+}
+
 func TestFindTransitRouteTool_LogsToolCall(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
@@ -265,7 +305,7 @@ func TestFindTransitRouteTool_LogsToolCall(t *testing.T) {
 		return core.RouteResult{TotalTime: 5}, nil
 	}
 
-	server := buildMCPServer("test", logger, load, findRoute)
+	server := buildMCPServer("test", logger, load, loadGeoPresent, findRoute)
 	session := connectTestClient(t, server)
 
 	callFindTransitRoute(t, session, "강남역", "홍대입구역")

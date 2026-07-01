@@ -10,6 +10,7 @@ import (
 
 	"github.com/GyeongHoKim/naeryeo/internal/config"
 	"github.com/GyeongHoKim/naeryeo/internal/core"
+	"github.com/GyeongHoKim/naeryeo/internal/geocode"
 )
 
 // version is overwritten via -ldflags at build time (see .goreleaser.yml).
@@ -70,28 +71,21 @@ func run(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	config.SetLogger(logger)
 	logger.Info("naeryeo: dispatch", "command", args[0])
 
+	loadODsay := func() (string, error) { return config.Load(config.ODsayAPIKey) }
+	loadGeocoder := func() (string, error) { return config.Load(config.GeocoderAPIKey) }
+
 	switch args[0] {
 	case "setup":
 		return runSetup(args[1:], os.Stdin, stdout, stderr, config.Save)
 	case "logout":
 		return runLogout(args[1:], stdout, stderr, config.Load, config.Delete)
 	case "route":
-		return runRoute(args[1:], stdout, stderr, config.Load,
-			func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-				client := core.NewClient(apiKey)
-				client.Logger = logger
-				return client.FindRoute(ctx, from, to)
-			})
+		return runRoute(args[1:], stdout, stderr, loadODsay, loadGeocoder, newFindRoute(logger))
 	case "mcp":
 		// mcp.StdioTransport binds directly to the process's real
 		// os.Stdin/os.Stdout — the stdout passed into run() is intentionally
 		// not used here (research.md §3 of specs/003-mcp-route-server).
-		server := buildMCPServer(version, logger, config.Load,
-			func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-				client := core.NewClient(apiKey)
-				client.Logger = logger
-				return client.FindRoute(ctx, from, to)
-			})
+		server := buildMCPServer(version, logger, loadODsay, loadGeocoder, newFindRoute(logger))
 		if err := runMCP(context.Background(), server); err != nil {
 			logger.Error("mcp: server exited with error", "error", err)
 			return 1
@@ -108,6 +102,23 @@ func run(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 		}
 		printUsage(stderr)
 		return 1
+	}
+}
+
+// newFindRoute builds the route-search function shared by the route and mcp
+// entry points. It constructs a core.Client for the ODsay key and, if a
+// geocoder key is configured, injects a Kakao geocoder so that From/To names
+// ODsay's station search does not recognize (building names, addresses) are
+// resolved via the fallback. When no geocoder key is stored the client's
+// Geocoder stays nil and behavior is unchanged (spec 004 FR-012).
+func newFindRoute(logger *slog.Logger) func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	return func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+		client := core.NewClient(apiKey)
+		client.Logger = logger
+		if gk, err := config.Load(config.GeocoderAPIKey); err == nil && gk != "" {
+			client.Geocoder = geocode.NewKakao(gk)
+		}
+		return client.FindRoute(ctx, from, to)
 	}
 }
 

@@ -24,26 +24,39 @@ type Client struct {
 }
 ```
 
+## 에러 계약 sentinel (core 소유)
+
+`Geocoder`의 에러 계약은 core가 소유한다. 구현체는 core를 단방향 import해 이 sentinel들을
+반환하고, core는 구현 패키지를 import하지 않아 순환이 없다.
+
+```go
+// internal/core/errors.go
+var (
+    ErrGeocoderNotFound    = errors.New("core: geocoder found no matching place")
+    ErrGeocoderAuthFailed  = errors.New("core: geocoder rejected the API key")
+    ErrGeocoderUnavailable = errors.New("core: geocoder is unavailable")
+)
+```
+
 ## Resolve 구현 계약(geocode 측이 지켜야 함)
 
 | 상황 | 반환 |
 |---|---|
 | 최소 1건 매칭 | 대표 후보 1건의 `Coordinate`, `nil` |
-| 매칭 0건 | `Coordinate{}`, `errStationNotFound`(core 내부 sentinel과 동등한 not-found 신호) |
-| 인증 실패(HTTP 401/403) | `Coordinate{}`, `ErrGeocoderAuthFailed` |
-| 타임아웃/네트워크/5xx/파싱 실패 | `Coordinate{}`, `ErrUpstreamUnavailable` |
+| 매칭 0건 | `Coordinate{}`, `core.ErrGeocoderNotFound` |
+| 인증 실패(HTTP 401/403) | `Coordinate{}`, `core.ErrGeocoderAuthFailed` |
+| 타임아웃/네트워크/5xx/파싱 실패 | `Coordinate{}`, `core.ErrGeocoderUnavailable` |
 
-> 참고: `errStationNotFound`는 core 비공개 sentinel이다. geocode 패키지가 이를 직접 반환할 수
-> 없으므로, 실제로는 core 측 폴백 코드가 "geocode의 not-found 에러"를 `errStationNotFound`로
-> 접는다. geocode는 이를 위한 공개 sentinel(예: `geocode.ErrNotFound`)을 노출하고, core가
-> `errors.Is`로 판별해 매핑한다.
+> `errStationNotFound`는 core 비공개 sentinel이다. geocode는 이를 직접 반환하지 않고 위 공개
+> sentinel을 반환하며, core의 `resolveStation` 폴백이 `core.ErrGeocoderNotFound`를
+> `errStationNotFound`로 접는다. auth/unavailable은 그대로 전파된다.
 
 ## FindRoute 폴백 계약
 
 - from/to 각각에 대해: `searchStation` 실패(not found) 시 `Geocoder != nil`이면
   `Geocoder.Resolve` 호출 → 성공 좌표로 경로 검색 계속.
 - `Geocoder.Resolve`가 not-found → 해당 Side의 `ErrPointNotFound`.
-- `Geocoder.Resolve`가 `ErrGeocoderAuthFailed`/`ErrUpstreamUnavailable` → 그대로 전파.
+- `Geocoder.Resolve`가 `core.ErrGeocoderAuthFailed`/`core.ErrGeocoderUnavailable` → 그대로 전파.
 - `Geocoder == nil`이면 기존과 100% 동일(회귀 없음).
 - 정류장 검색이 성공하면 `Geocoder.Resolve`를 호출하지 않는다(FR-003).
 

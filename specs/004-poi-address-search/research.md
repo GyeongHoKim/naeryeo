@@ -71,23 +71,27 @@ func Delete(cred Credential) error
 
 ## 3. 지오코더 에러 매핑
 
-**Decision**: 매핑은 **2계층**이다. geocode가 자체 공개 sentinel을 반환하고, core의
-`resolveStation` 폴백 분기가 이를 core 도메인 신호로 접는다(geocode는 core 비공개 sentinel을
-반환할 수 없으므로 — 리뷰 지적 반영).
+**Decision**: `Geocoder`의 에러 계약 sentinel은 **core가 소유**한다. geocode는 core를 단방향
+import해 이 core sentinel들을 반환하고, core의 `resolveStation` 폴백이 `errors.Is`로 분류한다.
 
-| 상황 | geocode 반환(공개) | core 접기 | 사용자 결과 |
+| 상황 | geocode 반환(= core sentinel) | core 처리 | 사용자 결과 |
 |---|---|---|---|
-| `documents` 비어 있음(0건) | `geocode.ErrNotFound` | `errStationNotFound`(비공개) | `ErrPointNotFound{Side}` (FR-008) |
-| HTTP 401/403(키 무효) | `geocode.ErrAuthFailed` | `ErrGeocoderAuthFailed`(신규) | "장소 검색 키가 유효하지 않음"(FR-009) |
-| 타임아웃/네트워크/5xx/JSON 파싱 실패 | `geocode.ErrUnavailable` | `ErrUpstreamUnavailable`(재사용) | 원인 설명 에러(FR-009) |
+| `documents` 비어 있음(0건) | `core.ErrGeocoderNotFound` | `errStationNotFound`(비공개)로 접음 | `ErrPointNotFound{Side}` (FR-008) |
+| HTTP 401/403(키 무효) | `core.ErrGeocoderAuthFailed` | 그대로 전파 | "장소 검색 키가 유효하지 않음"(FR-009) |
+| 타임아웃/네트워크/5xx/JSON 파싱 실패 | `core.ErrGeocoderUnavailable` | 그대로 전파 | "장소 검색 서비스 연결 불가"(FR-009) |
 
 **Rationale**: "검색 결과 없음"을 기존 정류장 미검색과 동일한 `errStationNotFound`로 접으면
-FindRoute의 기존 not-found 처리 경로를 그대로 재사용할 수 있다(중복 최소화). 인증 실패만
-새 sentinel로 분리해 spec FR-009의 "서비스 오류 ≠ 장소 없음" 구분을 만족한다. geocode가 core
-비공개 sentinel을 직접 반환할 수 없으므로 공개 sentinel 노출 + core 접기 구조를 취한다.
+FindRoute의 기존 not-found 처리 경로를 그대로 재사용할 수 있다(중복 최소화). 인증/불가용은
+별도 sentinel로 분리해 spec FR-009의 "서비스 오류 ≠ 장소 없음" 구분을 만족한다.
+
+**설계 정정(구현 중 발견)**: 초기 계획은 "geocode가 자체 공개 sentinel을 소유하고 core가
+`errors.Is`로 접는다"였으나, 이는 **import 순환**을 만든다 — geocode는 `core.Coordinate`
+때문에 core를 import하는데, core가 `geocode.ErrNotFound`를 참조하면 상호 import가 된다. 따라서
+sentinel(및 `Coordinate`, 인터페이스)을 모두 소비자인 core가 소유하도록 정정했다. core는 구현
+패키지를 import하지 않으므로 단방향(geocode→core)만 남아 순환이 없다.
 
 **미확인 사항**: 실제 Kakao 인증 실패 코드/바디는 실측 필요(§1과 동일). 확인 전에는 401/403을
-`geocode.ErrAuthFailed`로 매핑하는 best-effort 구조를 두고, 실측 후 세분화한다.
+`core.ErrGeocoderAuthFailed`로 매핑하는 best-effort 구조를 두고, 실측 후 세분화한다.
 
 **리스크 (구현 시 검증 필요) — 정류장 에러 코드가 폴백을 건너뛸 가능성**: 현재
 `classifyODsayError`(`internal/core/client.go:157-177`)는 `resolveStation`(정류장 검색)과

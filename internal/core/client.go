@@ -193,6 +193,23 @@ type RouteStep struct {
 	Description string
 }
 
+// Coordinate is a longitude/latitude pair (EPSG:4326), as required by
+// ODsay's coordinate-based route search.
+type Coordinate struct {
+	X float64 // longitude
+	Y float64 // latitude
+}
+
+// Geocoder resolves a free-form place name (building name, address, POI)
+// into a Coordinate. It is defined here — in the consuming package — so
+// core stays decoupled from any concrete geocoding backend; implementations
+// live elsewhere (internal/geocode). A Geocoder MUST return a not-found
+// error that unwraps to its own package's not-found sentinel when the name
+// matches nothing, so resolveStation can map it to ErrPointNotFound.
+type Geocoder interface {
+	Resolve(ctx context.Context, query string) (Coordinate, error)
+}
+
 // Client searches transit routes via the ODsay API.
 type Client struct {
 	APIKey string
@@ -206,6 +223,11 @@ type Client struct {
 	// error codes, search outcomes). If nil, logging is discarded. Never
 	// logs c.APIKey.
 	Logger *slog.Logger
+	// Geocoder, when non-nil, is used as a fallback to resolve a From/To
+	// name that ODsay's station search does not recognize. When nil, no
+	// fallback occurs and an unrecognized name yields ErrPointNotFound
+	// exactly as before (spec 004 FR-012).
+	Geocoder Geocoder
 }
 
 // NewClient returns a Client configured to authenticate with apiKey.
@@ -227,10 +249,28 @@ func (c *Client) baseURL() string {
 	return defaultBaseURL
 }
 
-// resolveStation looks up name via ODsay's station search and returns the
-// first candidate's coordinates. It returns errStationNotFound if no
-// candidate matches.
+// resolveStation resolves name to coordinates. It first tries ODsay's
+// station search; if that recognizes no station AND a Geocoder is
+// configured, it falls back to the geocoder so building names and addresses
+// resolve too (spec 004). With no Geocoder configured it behaves exactly as
+// before: an unrecognized name yields errStationNotFound.
 func (c *Client) resolveStation(ctx context.Context, name string) (stationCandidate, error) {
+	station, err := c.searchStationByName(ctx, name)
+	if !errors.Is(err, errStationNotFound) {
+		// Success, or a non-not-found error (auth/unavailable/rejected) that
+		// the geocoder cannot remedy — return either as-is.
+		return station, err
+	}
+	if c.Geocoder == nil {
+		return stationCandidate{}, errStationNotFound
+	}
+	return c.geocodeFallback(ctx, name)
+}
+
+// searchStationByName looks up name via ODsay's station search and returns
+// the first candidate's coordinates. It returns errStationNotFound if no
+// candidate matches.
+func (c *Client) searchStationByName(ctx context.Context, name string) (stationCandidate, error) {
 	u := fmt.Sprintf("%s/searchStation?apiKey=%s&stationName=%s",
 		c.baseURL(), url.QueryEscape(c.APIKey), url.QueryEscape(name))
 
@@ -241,6 +281,15 @@ func (c *Client) resolveStation(ctx context.Context, name string) (stationCandid
 	if err := c.classifyODsayError(resp.Error, name, name); err != nil {
 		if errors.Is(err, errNoTravelNeeded) {
 			// -98 is meaningless for a single-point lookup; treat as not found.
+			return stationCandidate{}, errStationNotFound
+		}
+		var pointErr *ErrPointNotFound
+		if errors.As(err, &pointErr) {
+			// ODsay codes 3/4/5 (from/to/both not found) all mean this single
+			// name matched no stop. Normalize to errStationNotFound so the
+			// geocoder fallback engages; with no geocoder, resolveStation still
+			// yields errStationNotFound and FindRoute reports ErrPointNotFound
+			// with the correct side (spec 004 research §3 risk).
 			return stationCandidate{}, errStationNotFound
 		}
 		return stationCandidate{}, err
@@ -254,6 +303,25 @@ func (c *Client) resolveStation(ctx context.Context, name string) (stationCandid
 		return stationCandidate{}, errStationNotFound
 	}
 	return resp.Result.Station[0], nil
+}
+
+// geocodeFallback resolves name via c.Geocoder and adapts the result to a
+// stationCandidate (reusing the station path's coordinate type, so the rest
+// of FindRoute is unchanged). A geocoder "not found" is folded back into
+// errStationNotFound so FindRoute reports ErrPointNotFound for the right
+// side; auth/unavailable errors propagate as their core sentinels.
+func (c *Client) geocodeFallback(ctx context.Context, name string) (stationCandidate, error) {
+	coord, err := c.Geocoder.Resolve(ctx, name)
+	switch {
+	case err == nil:
+		c.logger().Debug("core: geocoder resolved name", "name", name)
+		return stationCandidate{X: flexibleFloat(coord.X), Y: flexibleFloat(coord.Y)}, nil
+	case errors.Is(err, ErrGeocoderNotFound):
+		return stationCandidate{}, errStationNotFound
+	default:
+		// ErrGeocoderAuthFailed / ErrGeocoderUnavailable — surface as-is.
+		return stationCandidate{}, err
+	}
 }
 
 // FindRoute searches for the representative transit route between from and

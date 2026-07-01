@@ -20,6 +20,7 @@ func runRoute(
 	args []string,
 	stdout, stderr io.Writer,
 	load func() (string, error),
+	loadGeocoder func() (string, error),
 	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
 ) int {
 	fs := flag.NewFlagSet("route", flag.ContinueOnError)
@@ -52,7 +53,7 @@ func runRoute(
 
 	result, err := findRoute(context.Background(), apiKey, *from, *to)
 	if err != nil {
-		code, writeErr := reportRouteError(stderr, err)
+		code, writeErr := reportRouteError(stderr, err, geocoderConfigured(loadGeocoder))
 		if writeErr != nil {
 			return 1
 		}
@@ -62,12 +63,22 @@ func runRoute(
 	return printRouteResult(stdout, *from, *to, result)
 }
 
+// geocoderConfigured reports whether a place-search key is stored. runRoute
+// and the MCP tool handler use it to decide whether to append the FR-007
+// "set up --geocoder" hint: the hint only helps when no geocoder key exists.
+// loadGeocoder is only called on an error path, so the happy path does not
+// touch the keychain a second time.
+func geocoderConfigured(loadGeocoder func() (string, error)) bool {
+	key, err := loadGeocoder()
+	return err == nil && key != ""
+}
+
 // reportRouteError writes a message describing err to stderr. It always
 // returns 1, since this is only called on an already-known error path; a
 // write failure while reporting that error is still surfaced via the
 // returned error so the caller cannot silently ignore it.
-func reportRouteError(stderr io.Writer, err error) (int, error) {
-	_, writeErr := fmt.Fprintln(stderr, "naeryeo route: "+routeErrorMessage(err))
+func reportRouteError(stderr io.Writer, err error, geocoderConfigured bool) (int, error) {
+	_, writeErr := fmt.Fprintln(stderr, "naeryeo route: "+routeErrorMessage(err, geocoderConfigured))
 	return 1, writeErr
 }
 
@@ -76,17 +87,29 @@ func reportRouteError(stderr io.Writer, err error) (int, error) {
 // by the CLI (route.go, prefixed with "naeryeo route: ") and the MCP tool
 // handler (mcp.go, used as-is) so both entry points give the same reason
 // for the same failure (spec 002 FR-013, spec 003 FR-012).
-func routeErrorMessage(err error) string {
+//
+// geocoderConfigured tells this function whether a place-search key is
+// stored, so the "point not found" case can append the FR-007 hint only when
+// setting up a geocoder would actually help (spec 004).
+func routeErrorMessage(err error, geocoderConfigured bool) string {
 	var pointErr *core.ErrPointNotFound
 	switch {
 	case errors.Is(err, core.ErrAPIKeyMissing):
 		return "API 키가 설정되지 않았습니다. naeryeo setup을 먼저 실행하세요"
 	case errors.Is(err, core.ErrAuthFailed):
 		return "저장된 API 키가 유효하지 않습니다. naeryeo setup으로 다시 등록하세요"
+	case errors.Is(err, core.ErrGeocoderAuthFailed):
+		return "장소 검색 키가 유효하지 않습니다. naeryeo setup --geocoder로 다시 등록하세요"
 	case errors.As(err, &pointErr):
-		return fmt.Sprintf("%s을(를) 찾을 수 없습니다: %q", sideLabel(pointErr.Side), pointErr.Name)
+		msg := fmt.Sprintf("%s을(를) 찾을 수 없습니다: %q", sideLabel(pointErr.Side), pointErr.Name)
+		if !geocoderConfigured {
+			msg += "\n건물명·주소로 찾으려면 naeryeo setup --geocoder로 장소 검색 키를 설정하세요"
+		}
+		return msg
 	case errors.Is(err, core.ErrNoRoute):
 		return "두 지점 사이에 대중교통 경로가 없습니다"
+	case errors.Is(err, core.ErrGeocoderUnavailable):
+		return "장소 검색 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요"
 	default:
 		return fmt.Sprintf("경로 검색 중 오류가 발생했습니다: %v", err)
 	}

@@ -97,13 +97,13 @@ internal/config/
 
 internal/core/
 ├── client.go            # 변경: Geocoder 인터페이스, Coordinate, Client.Geocoder, resolveStation 폴백
-├── errors.go            # 변경: ErrGeocoderAuthFailed 추가
+├── errors.go            # 변경: ErrGeocoder{NotFound,AuthFailed,Unavailable} 추가(계약 sentinel, core 소유)
+├── logging.go           # 변경: routeOutcome에 지오코더 에러 분류 추가
 └── client_test.go       # 변경: 가짜 Geocoder 주입 폴백 테스트
 
-internal/geocode/        # 신규 패키지
-├── kakao.go             # geocode.Kakao: core.Geocoder 구현(Kakao 키워드 검색)
+internal/geocode/        # 신규 패키지 (core를 단방향 import)
+├── kakao.go             # geocode.Kakao: core.Geocoder 구현(Kakao 키워드 검색), core sentinel 반환
 ├── kakao_test.go        # httptest 기반 테이블 테스트
-├── errors.go            # geocode.ErrNotFound/ErrAuthFailed/ErrUnavailable(공개 sentinel)
 └── doc.go
 
 README.md                # 변경: 지오코딩 필요성·선택성·설정법 추가, "사용 API" 섹션 정정

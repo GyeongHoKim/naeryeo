@@ -41,20 +41,21 @@ type Geocoder interface {
 }
 ```
 
-**계약**: `Geocoder` 구현체(`internal/geocode`)는 core 비공개 sentinel을 반환할 수 없으므로,
-**geocode 패키지가 자체 공개 sentinel을 반환**하고 core의 폴백 코드가 이를 접는다.
+**계약**: 소비자(core)가 **인터페이스 + `Coordinate` + 에러 계약 sentinel까지 전부 소유**한다.
+`Geocoder` 구현체는 core를 단방향 import(→ `Coordinate`, 계약 sentinel)하고, core는 구현
+패키지를 import하지 않으므로 import 순환이 없다. (구현 중 확인: geocode가 자체 sentinel을
+소유하면 core가 그것을 `errors.Is`로 판별하기 위해 geocode를 import해야 해 순환이 생긴다 —
+그래서 sentinel을 core로 이관했다.)
 
 - 성공: 대표(최상위) 후보 1건의 `Coordinate` 반환, `nil`.
-- 결과 0건: `geocode.ErrNotFound` 반환 → core가 `errors.Is`로 판별해 내부
-  `errStationNotFound`로 접음 → `FindRoute`가 `ErrPointNotFound{Side}`로 변환(FR-008).
-- 인증 실패: `geocode.ErrAuthFailed` 반환 → core가 `ErrGeocoderAuthFailed`로 변환(FR-009).
-- 그 외(타임아웃/네트워크/5xx/파싱): `geocode.ErrUnavailable` 반환 → core가
-  `ErrUpstreamUnavailable`로 변환(FR-009).
+- 결과 0건: `core.ErrGeocoderNotFound` 반환 → core 폴백이 내부 `errStationNotFound`로 접음 →
+  `FindRoute`가 `ErrPointNotFound{Side}`로 변환(FR-008).
+- 인증 실패: `core.ErrGeocoderAuthFailed` 반환(그대로 전파, FR-009).
+- 그 외(타임아웃/네트워크/5xx/파싱): `core.ErrGeocoderUnavailable` 반환(그대로 전파, FR-009).
 
-> `errStationNotFound`/`ErrGeocoderAuthFailed`/`ErrUpstreamUnavailable`은 모두 core 소유다.
-> geocode는 이들을 직접 반환하지 않으며, 자신의 공개 sentinel(`ErrNotFound`/`ErrAuthFailed`/
-> `ErrUnavailable`)만 노출한다. 매핑은 core의 `resolveStation` 폴백 분기가 담당한다
-> (contracts/core-geocoder.md, contracts/geocode-kakao.md와 일치).
+> `ErrGeocoderNotFound`/`ErrGeocoderAuthFailed`/`ErrGeocoderUnavailable`은 모두 core 소유이며
+> `Geocoder` 인터페이스의 에러 계약을 이룬다. geocode는 이 core sentinel들을 반환하고, core의
+> `resolveStation` 폴백 분기가 `errors.Is`로 분류한다.
 
 ## 4. Client 변경 (internal/core)
 
@@ -69,30 +70,23 @@ type Geocoder interface {
    신규 좌표 타입을 도입하지 않고 `resolveStation`의 기존 시그니처 `(stationCandidate, error)`를
    유지): `stationCandidate{X: flexibleFloat(coord.X), Y: flexibleFloat(coord.Y)}`. `Name`은
    비워 둔다(현재 결과 표현에 정류장명이 쓰이지 않음).
-   - `Resolve`가 `geocode.ErrNotFound`이면 `errStationNotFound`로 접어 전파(→ ErrPointNotFound).
-   - `Resolve`가 `geocode.ErrAuthFailed`이면 `ErrGeocoderAuthFailed`로 변환해 전파.
-   - `Resolve`가 `geocode.ErrUnavailable`이면 `ErrUpstreamUnavailable`로 변환해 전파.
+   - `Resolve`가 `core.ErrGeocoderNotFound`이면 `errStationNotFound`로 접어 전파(→ ErrPointNotFound).
+   - `Resolve`가 `core.ErrGeocoderAuthFailed`/`core.ErrGeocoderUnavailable`이면 그대로 전파.
 3. `c.Geocoder == nil`이면 기존과 동일하게 `errStationNotFound` 전파.
 
 `FindRoute`는 from/to 각각에 위 흐름을 독립 적용(혼합 입력 지원, spec Edge Case).
 
 ## 5. 에러
 
-**core 소유 (internal/core/errors.go)** — 사용자 대면 도메인 에러:
+**core 소유 (internal/core/errors.go)** — `Geocoder` 에러 계약 sentinel(geocode가 반환, core가
+분류) + 기존 도메인 에러:
 
-| 심볼 | 종류 | 변환되는 사용자 결과 |
+| 심볼 | 종류 | 발생 / 변환되는 사용자 결과 |
 |---|---|---|
-| `ErrGeocoderAuthFailed` | 신규 sentinel | "장소 검색 키가 유효하지 않음"(FR-009, 미검색과 구분) |
+| `ErrGeocoderNotFound` | 신규 sentinel | 지오코더 0건 → core가 `errStationNotFound`로 접음 → `ErrPointNotFound`(FR-008) |
+| `ErrGeocoderAuthFailed` | 신규 sentinel | 지오코더 401/403 → "장소 검색 키가 유효하지 않음"(FR-009, 미검색과 구분) |
+| `ErrGeocoderUnavailable` | 신규 sentinel | 지오코더 타임아웃/5xx/파싱 → "장소 검색 서비스 연결 불가"(FR-009) |
 | `ErrPointNotFound` | 기존 재사용 | 어느 쪽(from/to) 미해석인지 안내(FR-008) |
-| `ErrUpstreamUnavailable` | 기존 재사용 | 서비스 오류 안내(FR-009) |
-
-**geocode 소유 (internal/geocode)** — core로 전달되는 저수준 sentinel(사용자 대면 아님):
-
-| 심볼 | 발생 | core의 접기 |
-|---|---|---|
-| `geocode.ErrNotFound` | 검색 결과 0건 | `errStationNotFound`(비공개) → `ErrPointNotFound` |
-| `geocode.ErrAuthFailed` | HTTP 401/403 | `ErrGeocoderAuthFailed` |
-| `geocode.ErrUnavailable` | 타임아웃/네트워크/5xx/파싱 | `ErrUpstreamUnavailable` |
 
 ## 6. Kakao 응답 매핑 (internal/geocode)
 
@@ -102,9 +96,9 @@ Kakao 키워드 검색 응답 → `core.Coordinate`.
 |---|---|
 | `documents[0].x` (문자열, 경도) | `Coordinate.X`(`ParseFloat`) |
 | `documents[0].y` (문자열, 위도) | `Coordinate.Y`(`ParseFloat`) |
-| `documents` 길이 0 | → `geocode.ErrNotFound`(core가 `errStationNotFound`로 접음) |
-| HTTP 401/403 | → `geocode.ErrAuthFailed`(core가 `ErrGeocoderAuthFailed`로 변환) |
-| 그 외 실패(타임아웃/네트워크/5xx/파싱) | → `geocode.ErrUnavailable`(core가 `ErrUpstreamUnavailable`로 변환) |
+| `documents` 길이 0 | → `core.ErrGeocoderNotFound`(core가 `errStationNotFound`로 접음) |
+| HTTP 401/403 | → `core.ErrGeocoderAuthFailed` |
+| 그 외 실패(타임아웃/네트워크/5xx/파싱) | → `core.ErrGeocoderUnavailable` |
 
 `place_name`/`address_name`/`road_address_name`은 현재 결과 표현에 불필요하므로 좌표만 사용
 (향후 후보 표시 기능 도입 시 활용 여지 — 현재 범위 밖).

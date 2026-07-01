@@ -1,6 +1,13 @@
 ---
 name: naeryeo
-description: Answer natural-language questions about South Korean public-transit routes (bus, subway, inter-city) using the naeryeo CLI and MCP server, which wraps the ODsay API. Use when a user asks how to get from one Korean place/station to another by public transit.
+description: >-
+  Answer natural-language questions about South Korean public-transit routes
+  (subway, bus, inter-city bus) using the naeryeo CLI and MCP server, which wraps
+  the ODsay API. Use whenever a user asks how to get from one place in South Korea
+  to another by public transit -- by station or stop name, and by building name or
+  street address when the optional place-search key is configured. Prefer this over
+  answering from memory: the CLI returns live travel time, transfer count, fare, and
+  step-by-step directions that training data cannot.
 metadata:
   homepage: https://github.com/GyeongHoKim/naeryeo
   license: MIT
@@ -11,7 +18,10 @@ metadata:
 naeryeo is a Go CLI and MCP stdio server that answers natural-language questions
 about South Korean public-transit routes. It wraps the [ODsay API](https://lab.odsay.com)
 and returns total travel time, number of transfers, fare, and human-readable
-step-by-step directions.
+step-by-step directions. ODsay recognizes station and stop names only; to also
+accept building names and street addresses (e.g. "아이디스 타워"), naeryeo can
+resolve them to coordinates via the Kakao Local API when an optional place-search
+key is configured.
 
 ## When to use this skill
 
@@ -56,6 +66,22 @@ refuses to run rather than falling back to a plaintext file.
 
 Run `naeryeo logout` to delete the stored key.
 
+### 3. (Optional) Store the place-search key for building/address queries
+
+Station and stop names work with just the ODsay key above. To let the user ask by
+**building name or street address**, store a Kakao REST API key as well. Have the
+user create an app and REST API key at <https://developers.kakao.com>, then run:
+
+```bash
+naeryeo setup --geocoder
+```
+
+This key is stored as a **separate** OS-keychain entry from the ODsay key, with the
+same protections (keychain only, never plaintext, never sent anywhere except Kakao).
+Delete it independently with `naeryeo logout --geocoder`. Without it, station/stop
+lookups still work and building/address queries simply report that the place was
+not found.
+
 ## Usage
 
 ### Option A — CLI (one-off query)
@@ -76,9 +102,10 @@ Example output:
 요금: 1,500원
 ```
 
-Pass the user's origin and destination — station names, stop names, or addresses —
-to `--from` and `--to`, then relay the returned route (time, transfers, fare, and
-the numbered steps) back in natural language.
+Pass the user's origin and destination to `--from` and `--to`, then relay the
+returned route (time, transfers, fare, and the numbered steps) back in natural
+language. Station and stop names always work; building names and street addresses
+work only when the optional place-search key (see Prerequisites §3) is configured.
 
 ### Option B — MCP server (persistent, for chat clients)
 
@@ -104,9 +131,25 @@ No API key goes in this config — the server reuses the key stored by `naeryeo 
 Relay the underlying reason to the user; do not retry blindly.
 
 - **No API key stored** → tell the user to run `naeryeo setup` first.
-- **Unrecognized place** → ODsay could not resolve the origin/destination; ask the
-  user for a more specific station/stop name or address.
+- **Unrecognized place** → the origin/destination could not be resolved. If it was a
+  station/stop name, ask for a more specific one. If it was a building name or
+  address, naeryeo appends a hint to set up the place-search key; relay it — the user
+  needs to run `naeryeo setup --geocoder` (see Prerequisites §3) for those to work.
 - **No route found** → no public-transit path exists between the two points.
-- **Invalid/expired key** → the stored key was rejected; suggest re-running
-  `naeryeo setup`. (Note: some ODsay keys are IP-restricted and only work from the
-  machine/network they were issued for.)
+- **Invalid/expired ODsay key** → the stored routing key was rejected; suggest
+  re-running `naeryeo setup`. (Note: some ODsay keys are IP-restricted and only work
+  from the machine/network they were issued for.)
+- **Invalid place-search key** → the stored Kakao key was rejected; suggest
+  re-running `naeryeo setup --geocoder`. This is distinct from the ODsay key error.
+
+## Common Mistakes
+
+- **Quote place names that contain spaces.** Use
+  `naeryeo route --from "아이디스 타워" --to "수지구청"`. An unquoted name with a space is
+  split into separate arguments and the command fails with
+  `--from과 --to를 모두 입력해야 합니다`.
+- **Building names and addresses need the place-search key** (Prerequisites §3).
+  Without it only station and stop names resolve; a building name returns
+  "not found" plus a hint to run `naeryeo setup --geocoder`.
+- **Do not put API keys in `claude_desktop_config.json`.** The MCP server and CLI
+  share the same keychain-stored keys — running `naeryeo setup` once covers both.

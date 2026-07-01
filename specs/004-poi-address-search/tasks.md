@@ -31,7 +31,7 @@ description: "Task list for 건물명·주소(POI) 출발지/도착지 지원"
 **Purpose**: 프로젝트는 이미 스캐폴딩됨. 이 기능은 새 서드파티 의존 없이 표준 라이브러리
 (`net/http`+`encoding/json`)와 기존 `go-keyring`만 사용한다.
 
-- [ ] T001 [P] go.mod 확인: Kakao 클라이언트는 표준 라이브러리로 구현하므로 신규 의존 추가가
+- [X] T001 [P] go.mod 확인: Kakao 클라이언트는 표준 라이브러리로 구현하므로 신규 의존 추가가
       없음을 확인(필요 시 `go mod tidy`만 실행). 신규 패키지 디렉터리 `internal/geocode/` 생성
       및 `internal/geocode/doc.go`에 패키지 주석 작성.
 
@@ -44,18 +44,18 @@ US2(지오코더 키 저장), 그리고 기존 호출부 컴파일을 모두 좌
 
 **⚠️ CRITICAL**: 이 phase 완료 전에는 어떤 사용자 스토리도 시작할 수 없다.
 
-- [ ] T002 `internal/config/config.go`에 `Credential` 정의 타입과 상수 `ODsayAPIKey`
+- [X] T002 `internal/config/config.go`에 `Credential` 정의 타입과 상수 `ODsayAPIKey`
       (`"odsay-api-key"`, 기존 `keyUsername` 값 그대로), `GeocoderAPIKey`(`"geocoder-api-key"`)를
       추가하고, `Save`/`Load`/`Delete` 시그니처를 `(cred Credential, ...)`로 파라미터화. 키체인
       username을 cred로 사용(서비스명 `naeryeo` 유지). (contracts/config-credential.md)
-- [ ] T003 `internal/config/config_test.go` 갱신: 자격증명별 Save→Load 왕복, 두 자격증명 상호
+- [X] T003 `internal/config/config_test.go` 갱신: 자격증명별 Save→Load 왕복, 두 자격증명 상호
       독립성(하나 저장이 다른 하나에 영향 없음), Delete 멱등성, 빈 키 거부, fake backend로
       keychain-unavailable 경로, `ODsayAPIKey == "odsay-api-key"` 회귀(기존 저장분 호환) 검증.
-- [ ] T004 기존 호출부를 새 config 시그니처에 맞춰 갱신하되 **동작 변경 없이**
+- [X] T004 기존 호출부를 새 config 시그니처에 맞춰 갱신하되 **동작 변경 없이**
       `config.ODsayAPIKey`를 바인딩: `cmd/naeryeo/main.go`의 `config.Load`/`config.Save`/
       `config.Delete` 배선을 ODsay 자격증명으로 감싸 `runSetup`/`runLogout`/`runRoute`/
       `buildMCPServer`에 전달(각 함수 시그니처는 이 단계에서 유지). (cmd/naeryeo/main.go)
-- [ ] T005 `just check`(fmt+lint+test) 그린 확인 — 자격증명 리팩터 후 기존 기능 회귀 0
+- [X] T005 `just check`(fmt+lint+test) 그린 확인 — 자격증명 리팩터 후 기존 기능 회귀 0
       (역/정류장 검색·setup·logout·mcp 동작 불변).
 
 **Checkpoint**: config 자격증명 기반 완성 — 사용자 스토리 구현 시작 가능.
@@ -75,11 +75,11 @@ US2(지오코더 키 저장), 그리고 기존 호출부 컴파일을 모두 좌
 
 > 구현 전에 작성하고 FAIL을 확인한 뒤 구현으로 넘어간다.
 
-- [ ] T006 [P] [US1] `internal/geocode/kakao_test.go`: `httptest.Server`로 Kakao 키워드 검색
+- [X] T006 [P] [US1] `internal/geocode/kakao_test.go`: `httptest.Server`로 Kakao 키워드 검색
       응답 분기 테이블 테스트 — 1건/다건→첫 건/0건→`ErrNotFound`/401·403→`ErrAuthFailed`/
       500→`ErrUnavailable`/깨진 JSON→`ErrUnavailable`. `Authorization: KakaoAK <key>` 헤더 형식과
       `query` URL 인코딩 전송 검증. (contracts/geocode-kakao.md)
-- [ ] T007 [P] [US1] `internal/core/client_test.go`: 가짜 `Geocoder` 주입 폴백 테스트 —
+- [X] T007 [P] [US1] `internal/core/client_test.go`: 가짜 `Geocoder` 주입 폴백 테스트 —
       정류장 성공→지오코더 미호출(호출 카운트 0), 정류장 실패+지오코더 성공→경로 결과,
       +`geocode.ErrNotFound`→`ErrPointNotFound{Side}`, +`geocode.ErrAuthFailed`→
       `ErrGeocoderAuthFailed`, +`Geocoder==nil`→`ErrPointNotFound{Side}`(기존 동작),
@@ -87,22 +87,28 @@ US2(지오코더 키 저장), 그리고 기존 호출부 컴파일을 모두 좌
 
 ### Implementation for User Story 1
 
-- [ ] T008 [P] [US1] `internal/geocode/errors.go`: 공개 sentinel `ErrNotFound`/`ErrAuthFailed`/
-      `ErrUnavailable` 정의. (data-model.md §5)
-- [ ] T009 [US1] `internal/core`에 `Coordinate{X,Y float64}` 타입, `Geocoder` 소비자 인터페이스
+> **설계 정정(구현 중 확정)**: 아래 T008/T009/T011의 원안은 sentinel을 geocode가 소유하는
+> 것이었으나, 이는 import 순환을 만든다(geocode→core, core→geocode). 실제 구현은 **sentinel을
+> core가 소유**한다 — `core.ErrGeocoderNotFound`/`ErrGeocoderAuthFailed`/`ErrGeocoderUnavailable`을
+> `internal/core/errors.go`에 두고, `internal/geocode`는 core를 단방향 import해 이들을 반환한다.
+> 따라서 `internal/geocode/errors.go`는 만들지 않았다. (research.md §3·§4, data-model.md §3·§5 참조)
+
+- [X] T008 [P] [US1] ~~`internal/geocode/errors.go`~~ → **정정**: 계약 sentinel은 core 소유
+      (T009로 통합). geocode는 별도 errors.go 없이 core sentinel을 반환.
+- [X] T009 [US1] `internal/core`에 `Coordinate{X,Y float64}` 타입, `Geocoder` 소비자 인터페이스
       (`Resolve(ctx, query) (Coordinate, error)`)를 `client.go`에, `ErrGeocoderAuthFailed`
       sentinel을 `errors.go`에 추가. (contracts/core-geocoder.md, data-model.md §2·§3·§5)
-- [ ] T010 [US1] `internal/geocode/kakao.go`: `NewKakao(apiKey)`(+ 테스트용 `BaseURL`/`HTTPClient`
+- [X] T010 [US1] `internal/geocode/kakao.go`: `NewKakao(apiKey)`(+ 테스트용 `BaseURL`/`HTTPClient`
       필드), `Resolve` 구현 — Kakao 키워드 검색 GET(`size=1`,`sort=accuracy`), `documents[0].x/y`
       `ParseFloat`→`core.Coordinate`, §3 에러 매핑, context 전파·타임아웃, **API 키 무로깅**.
       (depends: T008, T009; contracts/geocode-kakao.md)
-- [ ] T011 [US1] `internal/core/client.go`: `Client.Geocoder Geocoder` 필드 추가 +
+- [X] T011 [US1] `internal/core/client.go`: `Client.Geocoder Geocoder` 필드 추가 +
       `resolveStation` 폴백 분기 — `errStationNotFound`이고 `Geocoder!=nil`이면 `Resolve` 호출,
       반환 `Coordinate`를 `stationCandidate{X: flexibleFloat(...), Y: flexibleFloat(...)}`로 변환,
       `geocode.ErrNotFound`→`errStationNotFound`, `ErrAuthFailed`→`ErrGeocoderAuthFailed`,
       `ErrUnavailable`→`ErrUpstreamUnavailable`로 접기. from/to 독립 적용. (depends: T009;
       data-model.md §4)
-- [ ] T012 [US1] `cmd/naeryeo/main.go`: route·mcp의 `findRoute` 클로저 내부에서
+- [X] T012 [US1] `cmd/naeryeo/main.go`: route·mcp의 `findRoute` 클로저 내부에서
       `config.Load(config.GeocoderAPIKey)` 조회 → 키가 있으면 `geocode.NewKakao(gk)`를
       `core.Client.Geocoder`에 주입, `ErrNotConfigured`면 주입 생략. `findRoute` 클로저 타입은
       불변. (depends: T010, T011; contracts/cli.md "cmd 배선")
@@ -122,19 +128,19 @@ US2(지오코더 키 저장), 그리고 기존 호출부 컴파일을 모두 좌
 
 ### Tests for User Story 2 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T013 [P] [US2] `cmd/naeryeo/setup_test.go`: `--geocoder` 유무에 따라 저장 대상 자격증명이
+- [X] T013 [P] [US2] `cmd/naeryeo/setup_test.go`: `--geocoder` 유무에 따라 저장 대상 자격증명이
       `GeocoderAPIKey`/`ODsayAPIKey`로 갈리는지, `--geocoder`일 때 프롬프트가 "Kakao REST API
       Key: "인지 검증. (contracts/cli.md)
-- [ ] T014 [P] [US2] `cmd/naeryeo/logout_test.go`: `--geocoder` 유무에 따라 load/delete 대상
+- [X] T014 [P] [US2] `cmd/naeryeo/logout_test.go`: `--geocoder` 유무에 따라 load/delete 대상
       자격증명이 갈리는지, "삭제함"/"삭제할 키 없음" 문구 유지 검증.
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] `cmd/naeryeo/setup.go`: 첫 인자(`args []string`)를 `flag.FlagSet`으로 파싱해
+- [X] T015 [US2] `cmd/naeryeo/setup.go`: 첫 인자(`args []string`)를 `flag.FlagSet`으로 파싱해
       `--geocoder` 처리, 대상 `config.Credential`과 프롬프트 문구 분기. `runSetup` 시그니처를
       자격증명 인지형(`save func(config.Credential, string) error`)으로 조정하고 `main.go`가
       `config.Save`를 직접 전달하도록 배선 갱신. (cmd/naeryeo/setup.go, cmd/naeryeo/main.go)
-- [ ] T016 [US2] `cmd/naeryeo/logout.go`: `--geocoder` 플래그 파싱, load/delete 대상 자격증명
+- [X] T016 [US2] `cmd/naeryeo/logout.go`: `--geocoder` 플래그 파싱, load/delete 대상 자격증명
       분기. `runLogout` 시그니처를 자격증명 인지형으로 조정하고 `main.go` 배선 갱신.
       (cmd/naeryeo/logout.go, cmd/naeryeo/main.go)
 
@@ -154,15 +160,15 @@ route/mcp 진입점이 `loadGeocoder`로 설정 여부를 계산해 같은 문�
 
 ### Tests for User Story 3 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T017 [P] [US3] `cmd/naeryeo/route_test.go`: `routeErrorMessage(err, geocoderConfigured)`
+- [X] T017 [P] [US3] `cmd/naeryeo/route_test.go`: `routeErrorMessage(err, geocoderConfigured)`
       단위 테스트 — 세 조합(힌트 포함/미포함/인증 실패 문구). fake load/loadGeocoder(키 있음·없음)
       + fake findRoute(`ErrPointNotFound`/`ErrGeocoderAuthFailed`)로 route 출력 검증.
-- [ ] T018 [P] [US3] `cmd/naeryeo/mcp_test.go`: MCP 도구 핸들러가 `loadGeocoder` 반영해 route와
+- [X] T018 [P] [US3] `cmd/naeryeo/mcp_test.go`: MCP 도구 핸들러가 `loadGeocoder` 반영해 route와
       **동일한** 힌트/인증 실패 문구를 반환하는지 검증(FR-011 문구 통일).
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] `routeErrorMessage`를 `(err error, geocoderConfigured bool) string`으로 확장 —
+- [X] T019 [US3] `routeErrorMessage`를 `(err error, geocoderConfigured bool) string`으로 확장 —
       `ErrPointNotFound`+`!geocoderConfigured`면 FR-007 힌트("`naeryeo setup --geocoder` ...")
       추가, `ErrGeocoderAuthFailed`면 인증 실패 문구. `runRoute`와 `routeToolHandler`/
       `buildMCPServer`에 `loadGeocoder func() (string, error)` 파라미터 추가, 에러 경로에서만
@@ -178,16 +184,16 @@ route/mcp 진입점이 `loadGeocoder`로 설정 여부를 계산해 같은 문�
 
 **Purpose**: 사용자 문서·리스크 검증·최종 게이트.
 
-- [ ] T020 [P] `README.md` 갱신: 지오코딩 필요성·선택성·설정 절차(신규 하위 섹션), 명령어 표에
+- [X] T020 [P] `README.md` 갱신: 지오코딩 필요성·선택성·설정 절차(신규 하위 섹션), 명령어 표에
       `setup/logout --geocoder` 행, 아키텍처에 `internal/geocode`, **"사용 API" 섹션 정정**
       (경로 검색=ODsay / 지오코딩=Kakao 역할 구분으로 모순 제거). (contracts/docs-readme.md)
-- [ ] T021 [US1] **리스크 검증** — 실제 ODsay 키로 `searchStation` 무매칭 응답 형태(0건 vs error
+- [X] T021 [US1] **리스크 검증** — 실제 ODsay 키로 `searchStation` 무매칭 응답 형태(0건 vs error
       code 3/4/5)를 실측. 코드 3/4/5가 사용되면 `resolveStation`이 정류장 not-found 계열을
       `errStationNotFound`로 정규화해 지오코더 폴백 진입을 보장하도록 보완하고 회귀 테스트 추가.
       (internal/core/client.go, internal/core/client_test.go; research.md §3 리스크)
-- [ ] T022 `quickstart.md`의 6개 시나리오 종단 검증(키 등록→건물명 검색→회귀→미설정 힌트→인증
+- [X] T022 `quickstart.md`의 6개 시나리오 종단 검증(키 등록→건물명 검색→회귀→미설정 힌트→인증
       실패→`just check`).
-- [ ] T023 `just check` 최종 그린 + 커버리지 회귀 없음 확인(Constitution Principle II·III).
+- [X] T023 `just check` 최종 그린 + 커버리지 회귀 없음 확인(Constitution Principle II·III).
 
 ---
 

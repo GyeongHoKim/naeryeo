@@ -33,17 +33,18 @@ func NewKakao(apiKey string) *Kakao
 | 조건 | 반환 |
 |---|---|
 | `documents` 비어있지 않음 | `Coordinate{X: parse(documents[0].x), Y: parse(documents[0].y)}`, nil |
-| `documents` 길이 0 | `Coordinate{}`, `geocode.ErrNotFound` |
-| HTTP 401 또는 403 | `Coordinate{}`, `geocode.ErrAuthFailed` |
-| 2xx 아님(그 외)·네트워크·타임아웃·JSON 파싱 실패 | `Coordinate{}`, `geocode.ErrUnavailable` |
+| `documents` 길이 0 | `core.Coordinate{}`, `core.ErrGeocoderNotFound` |
+| HTTP 401 또는 403 | `core.Coordinate{}`, `core.ErrGeocoderAuthFailed` |
+| 2xx 아님(그 외)·네트워크·타임아웃·JSON 파싱 실패 | `core.Coordinate{}`, `core.ErrGeocoderUnavailable` |
 
-> core는 `geocode.ErrNotFound`/`ErrAuthFailed`/`ErrUnavailable`을 각각 `errStationNotFound`
-> 접기 / `ErrGeocoderAuthFailed` / `ErrUpstreamUnavailable`로 매핑한다(core-geocoder.md 참조).
+> 이 sentinel들은 core 소유(에러 계약)다. geocode는 core를 단방향 import해 이들을 반환하며,
+> core의 `resolveStation` 폴백이 `core.ErrGeocoderNotFound`만 `errStationNotFound`로 접고
+> auth/unavailable은 그대로 전파한다(core-geocoder.md 참조).
 
 ## 좌표 파싱
 
-- Kakao `x`/`y`는 문자열. `strconv.ParseFloat`로 변환하며 파싱 실패는 `ErrUnavailable`로 취급
-  (예상치 못한 응답 형식 = 업스트림 이상).
+- Kakao `x`/`y`는 문자열. `strconv.ParseFloat`로 변환하며 파싱 실패는
+  `core.ErrGeocoderUnavailable`로 취급(예상치 못한 응답 형식 = 업스트림 이상).
 - `x`=경도→`Coordinate.X`, `y`=위도→`Coordinate.Y`.
 
 ## 로깅/보안
