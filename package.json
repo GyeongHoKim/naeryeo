@@ -9,6 +9,8 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.0",
     "@commitlint/config-conventional": "^21.2.0",
-    "husky": "^9.1.7"
+    "@semantic-release/exec": "^7.1.0",
+    "husky": "^9.1.7",
+    "semantic-release": "^24.2.9"
   }
 }

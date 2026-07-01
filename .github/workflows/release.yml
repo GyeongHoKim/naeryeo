@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Only one release may run at a time; never cancel an in-flight publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the git tag + GitHub Release (goreleaser)
+  id-token: write # npm OIDC / provenance (used once the npm wrapper lands)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history for version calculation + changelog
+          persist-credentials: true # semantic-release pushes the tag
+
+      - name: Install mise-managed toolchain
+        uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - name: Quality gate
+        run: just check # never release a red build
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Release
+        env:
+          # Default Actions token: same-repo tag + GitHub Release (goreleaser).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT / fine-grained token with write access to the tap + bucket repos;
+          # the default GITHUB_TOKEN cannot push to other repositories.
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: npx semantic-release
