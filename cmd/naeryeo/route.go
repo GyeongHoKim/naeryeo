@@ -67,21 +67,29 @@ func runRoute(
 // write failure while reporting that error is still surfaced via the
 // returned error so the caller cannot silently ignore it.
 func reportRouteError(stderr io.Writer, err error) (int, error) {
+	_, writeErr := fmt.Fprintln(stderr, "naeryeo route: "+routeErrorMessage(err))
+	return 1, writeErr
+}
+
+// routeErrorMessage turns a core/config error from a route search into a
+// human-readable Korean reason, with no CLI-specific framing. It is shared
+// by the CLI (route.go, prefixed with "naeryeo route: ") and the MCP tool
+// handler (mcp.go, used as-is) so both entry points give the same reason
+// for the same failure (spec 002 FR-013, spec 003 FR-012).
+func routeErrorMessage(err error) string {
 	var pointErr *core.ErrPointNotFound
-	var writeErr error
 	switch {
 	case errors.Is(err, core.ErrAPIKeyMissing):
-		_, writeErr = fmt.Fprintln(stderr, "naeryeo route: API 키가 설정되지 않았습니다. naeryeo setup을 먼저 실행하세요")
+		return "API 키가 설정되지 않았습니다. naeryeo setup을 먼저 실행하세요"
 	case errors.Is(err, core.ErrAuthFailed):
-		_, writeErr = fmt.Fprintln(stderr, "naeryeo route: 저장된 API 키가 유효하지 않습니다. naeryeo setup으로 다시 등록하세요")
+		return "저장된 API 키가 유효하지 않습니다. naeryeo setup으로 다시 등록하세요"
 	case errors.As(err, &pointErr):
-		_, writeErr = fmt.Fprintf(stderr, "naeryeo route: %s을(를) 찾을 수 없습니다: %q\n", sideLabel(pointErr.Side), pointErr.Name)
+		return fmt.Sprintf("%s을(를) 찾을 수 없습니다: %q", sideLabel(pointErr.Side), pointErr.Name)
 	case errors.Is(err, core.ErrNoRoute):
-		_, writeErr = fmt.Fprintln(stderr, "naeryeo route: 두 지점 사이에 대중교통 경로가 없습니다")
+		return "두 지점 사이에 대중교통 경로가 없습니다"
 	default:
-		_, writeErr = fmt.Fprintf(stderr, "naeryeo route: 경로 검색 중 오류가 발생했습니다: %v\n", err)
+		return fmt.Sprintf("경로 검색 중 오류가 발생했습니다: %v", err)
 	}
-	return 1, writeErr
 }
 
 // withThousandsSeparator formats n with comma thousands separators, e.g.

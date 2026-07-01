@@ -36,7 +36,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 				return core.NewClient(apiKey).FindRoute(ctx, from, to)
 			})
 	case "mcp":
-		return notImplemented(stderr, "mcp")
+		// mcp.StdioTransport binds directly to the process's real
+		// os.Stdin/os.Stdout — the stdout passed into run() is intentionally
+		// not used here (research.md §3 of specs/003-mcp-route-server).
+		server := buildMCPServer(version, config.Load,
+			func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+				return core.NewClient(apiKey).FindRoute(ctx, from, to)
+			})
+		if err := runMCP(context.Background(), server); err != nil {
+			if _, werr := fmt.Fprintf(stderr, "naeryeo mcp: %v\n", err); werr != nil {
+				return 1
+			}
+			return 1
+		}
+		return 0
 	case "--version":
 		if _, err := fmt.Fprintln(stdout, version); err != nil {
 			return 1
@@ -49,14 +62,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		printUsage(stderr)
 		return 1
 	}
-}
-
-// notImplemented reports that cmd is a recognized but unfinished subcommand.
-func notImplemented(w io.Writer, cmd string) int {
-	if _, err := fmt.Fprintf(w, "naeryeo %s: not yet implemented\n", cmd); err != nil {
-		return 1
-	}
-	return 1
 }
 
 func printUsage(w io.Writer) {

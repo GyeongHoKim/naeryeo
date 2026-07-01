@@ -32,7 +32,7 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 **Purpose**: MCP SDK 의존성 추가
 
-- [ ] T001 저장소 루트에서 `go get github.com/modelcontextprotocol/go-sdk/mcp@latest`
+- [X] T001 저장소 루트에서 `go get github.com/modelcontextprotocol/go-sdk/mcp@latest`
       실행(research.md §1에서 `v1.6.1` 확인) 후 `go mod tidy`로 `go.mod`/`go.sum`을
       갱신한다. `go build ./...`로 베이스라인이 정상 컴파일됨을 확인한다.
 
@@ -45,18 +45,18 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 **⚠️ CRITICAL**: 아래 태스크 완료 전까지 Phase 3 이후 착수 금지
 
-- [ ] T002 `cmd/naeryeo/route.go`를 리팩터링한다: `reportRouteError`의 `switch` 안에 있던
+- [X] T002 `cmd/naeryeo/route.go`를 리팩터링한다: `reportRouteError`의 `switch` 안에 있던
       사유 문구 생성 로직을 프리픽스 없는 순수 함수
       `routeErrorMessage(err error) string`(예: `"API 키가 설정되지 않았습니다. naeryeo
       setup을 먼저 실행하세요"`, `"naeryeo route: "` 같은 CLI 전용 프리픽스는 포함하지
       않음)로 추출한다. `reportRouteError`는 `"naeryeo route: "+routeErrorMessage(err)`를
       stderr에 쓰도록 수정한다. **기존 `cmd/naeryeo/route_test.go`는 수정 없이 그대로
       통과해야 한다**(문구 내용은 동일하게 유지, 프리픽스만 호출부에서 재조립).
-- [ ] T003 [P] 새 파일 `cmd/naeryeo/mcp.go`에 `RouteToolInput{From, To string}`,
+- [X] T003 [P] 새 파일 `cmd/naeryeo/mcp.go`에 `RouteToolInput{From, To string}`,
       `RouteToolOutput{NoTravelNeeded bool; TotalTimeMinutes, TransferCount, FareWon int;
       Steps []string}` 구조체를 `json`/`jsonschema` 태그와 함께 정의한다(data-model.md,
       contracts/mcp-tool.md 참조).
-- [ ] T004 `cmd/naeryeo/mcp.go`에 `toRouteToolOutput(result core.RouteResult)
+- [X] T004 `cmd/naeryeo/mcp.go`에 `toRouteToolOutput(result core.RouteResult)
       RouteToolOutput` 매핑 헬퍼를 구현한다: `TotalTime`→`TotalTimeMinutes`,
       `TransferCount`→`TransferCount`, `Fare`→`FareWon`, 각 `RouteStep.Description`을
       `Steps` 문자열 슬라이스로, `NoTravelNeeded`는 그대로 옮긴다. (depends on T003)
@@ -78,7 +78,7 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 > **NOTE: 아래 테스트를 먼저 작성하고, 구현 전에는 실패(또는 컴파일 실패)함을 확인한다**
 
-- [ ] T005 [US1] 새 파일 `cmd/naeryeo/mcp_test.go`에 `mcp.NewInMemoryTransports()` +
+- [X] T005 [US1] 새 파일 `cmd/naeryeo/mcp_test.go`에 `mcp.NewInMemoryTransports()` +
       `mcp.NewClient` + `(*mcp.ClientSession).CallTool`로 실제 MCP 왕복을 재현하는 테스트를
       추가한다: (a) `load`/`findRoute`가 성공을 반환할 때 `find_transit_route` 결과의
       `totalTimeMinutes`/`transferCount`/`fareWon`/`steps`가 기대값과 일치, (b)
@@ -88,7 +88,7 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] `cmd/naeryeo/mcp.go`에
+- [X] T006 [US1] `cmd/naeryeo/mcp.go`에
       `routeToolHandler(ctx context.Context, req *mcp.CallToolRequest, in RouteToolInput)
       (*mcp.CallToolResult, RouteToolOutput, error)`를 구현한다: 클로저로 주입된 `load`를
       호출해 API 키를 얻고(로드 실패가 `config.ErrNotConfigured`가 아니면 즉시 에러 반환),
@@ -97,14 +97,14 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
       `core.FindRoute` 자체가 `ErrAPIKeyMissing`을 반환하므로 별도의 "키 없음" 분기를
       새로 만들 필요가 없다), 성공이면 `toRouteToolOutput`으로 매핑해 반환한다.
       (depends on T002, T004)
-- [ ] T007 [US1] `cmd/naeryeo/mcp.go`에
+- [X] T007 [US1] `cmd/naeryeo/mcp.go`에
       `buildMCPServer(version string, load func() (string, error), findRoute
       func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error))
       *mcp.Server`를 구현한다: `mcp.NewServer(&mcp.Implementation{Name: "naeryeo",
       Version: version}, nil)`로 서버를 만들고, `mcp.AddTool(server, &mcp.Tool{Name:
       "find_transit_route", Description: "..."}, routeToolHandler를 `load`/`findRoute`에
       바인딩한 클로저)`로 도구를 등록한다. (depends on T006)
-- [ ] T008 [US1] `cmd/naeryeo/mcp.go`에 `runMCP(ctx context.Context, server *mcp.Server)
+- [X] T008 [US1] `cmd/naeryeo/mcp.go`에 `runMCP(ctx context.Context, server *mcp.Server)
       error`를 구현한다(`server.Run(ctx, &mcp.StdioTransport{})`를 그대로 호출). `cmd/
       naeryeo/main.go`의 `"mcp"` 분기를 `notImplemented(stderr, "mcp")` 대신
       `buildMCPServer`+`runMCP` 호출(실인자: `version`, `config.Load`, `core.NewClient(apiKey)
@@ -126,7 +126,7 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 ### Tests for User Story 2 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T009 [US2] `cmd/naeryeo/mcp_test.go`에 (a) `load`가 `config.ErrNotConfigured`를
+- [X] T009 [US2] `cmd/naeryeo/mcp_test.go`에 (a) `load`가 `config.ErrNotConfigured`를
       반환할 때 `CallTool` 결과의 `IsError == true`이고 텍스트에 "naeryeo setup"이
       포함됨, (b) `findRoute`가 `core.ErrAuthFailed`를 반환할 때 `IsError == true`이고
       (a)와는 다른, "유효하지 않습니다"가 포함된 문구임을 검증하는 테스트를 추가한다.
@@ -151,7 +151,7 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 ### Tests for User Story 3 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T010 [US3] `cmd/naeryeo/mcp_test.go`에 (a) `findRoute`가
+- [X] T010 [US3] `cmd/naeryeo/mcp_test.go`에 (a) `findRoute`가
       `&core.ErrPointNotFound{Side:"from"}`(또는 `"to"`)를 반환 → `IsError == true`이고
       어느 지점인지 알 수 있는 문구, (b) `core.ErrNoRoute` 반환 → `IsError == true`이고
       "경로가 없습니다" 류 문구, (c) `core.ErrUpstreamUnavailable` 반환 → `IsError ==
@@ -172,16 +172,16 @@ Mandatory)에 따라 모든 사용자 스토리에 테스트 태스크가 REQUIR
 
 **Purpose**: 스토리 전반에 걸친 마무리
 
-- [ ] T011 [P] 저장소 루트에서 `just fmt`, `just lint`, `just test`(`just check`)를
+- [X] T011 [P] 저장소 루트에서 `just fmt`, `just lint`, `just test`(`just check`)를
       실행하고 발견된 문제를 모두 수정한다(constitution Principle III).
-- [ ] T012 [P] `README.md`의 "Claude Desktop/Code에 연결하기" 절과 명령어 표가 실제 동작과
+- [X] T012 [P] `README.md`의 "Claude Desktop/Code에 연결하기" 절과 명령어 표가 실제 동작과
       어긋나지 않는지 확인한다(도구 이름 `find_transit_route`는 README에 노출되지 않아도
       되는 구현 세부사항이므로, README 자체의 수정은 필요하지 않을 가능성이 높다 — 확인만
       한다).
 - [ ] T013 `specs/003-mcp-route-server/quickstart.md` §3(실제 Claude Desktop/Code +
       ODsay 키로 수동 검증)은 이 개발 환경에서 실행할 수 없다(API 키·실제 MCP 클라이언트
       부재). 사용자가 직접 실제 환경에서 검증해야 함을 커밋/PR 설명에 명시한다.
-- [ ] T014 커밋 제안 전, constitution Principle I(idiomatic Go)과 Principle II(테스트
+- [X] T014 커밋 제안 전, constitution Principle I(idiomatic Go)과 Principle II(테스트
       커버리지)를 기준으로 변경분을 자체 리뷰한다(AGENTS.md Required Workflow 5단계).
 
 ---
