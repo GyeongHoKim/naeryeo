@@ -383,10 +383,23 @@ func toRouteResult(p pathCandidate) RouteResult {
 	}
 	return RouteResult{
 		TotalTime:     p.Info.TotalTime,
-		TransferCount: p.Info.SubwayTransitCount + p.Info.BusTransitCount,
+		TransferCount: transferCount(p.Info.SubwayTransitCount, p.Info.BusTransitCount),
 		Fare:          p.Info.Payment,
 		Steps:         steps,
 	}
+}
+
+// transferCount converts ODsay's per-mode boarding counts into a transfer
+// count. subwayTransitCount/busTransitCount are the number of subway/bus
+// *boardings*, so the number of transfers is one less than the total number
+// of boardings (a single ride is zero transfers). Zero boardings (e.g. a
+// walk-only path) yields zero, never a negative count.
+func transferCount(subwayBoardings, busBoardings int) int {
+	boardings := subwayBoardings + busBoardings
+	if boardings <= 1 {
+		return 0
+	}
+	return boardings - 1
 }
 
 func describeSubPath(sp subPathSegment) string {

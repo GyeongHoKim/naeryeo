@@ -70,7 +70,7 @@ func TestFindRoute_Success(t *testing.T) {
 		}}}}
 		resp.Result.Path[0].Info.TotalTime = 42
 		resp.Result.Path[0].Info.Payment = 1500
-		resp.Result.Path[0].Info.SubwayTransitCount = 1
+		resp.Result.Path[0].Info.SubwayTransitCount = 2 // two subway boardings = one transfer
 		writeJSON(t, w, resp)
 	}
 
@@ -122,6 +122,7 @@ func TestFindRoute_NoTransfer(t *testing.T) {
 		}}}}
 		resp.Result.Path[0].Info.TotalTime = 10
 		resp.Result.Path[0].Info.Payment = 1200
+		resp.Result.Path[0].Info.BusTransitCount = 1 // a single boarding must be zero transfers
 		writeJSON(t, w, resp)
 	}
 
@@ -133,7 +134,25 @@ func TestFindRoute_NoTransfer(t *testing.T) {
 		t.Fatalf("FindRoute() error = %v, want nil", err)
 	}
 	if got.TransferCount != 0 {
-		t.Errorf("TransferCount = %d, want 0", got.TransferCount)
+		t.Errorf("TransferCount = %d, want 0 (one boarding is zero transfers)", got.TransferCount)
+	}
+}
+
+func TestTransferCount(t *testing.T) {
+	tests := []struct {
+		subway, bus, want int
+	}{
+		{0, 0, 0}, // walk-only
+		{1, 0, 0}, // single subway ride (the reported bug)
+		{0, 1, 0}, // single bus ride
+		{2, 0, 1}, // subway → subway transfer
+		{1, 1, 1}, // subway → bus transfer
+		{2, 1, 2}, // three boardings, two transfers
+	}
+	for _, tt := range tests {
+		if got := transferCount(tt.subway, tt.bus); got != tt.want {
+			t.Errorf("transferCount(subway=%d, bus=%d) = %d, want %d", tt.subway, tt.bus, got, tt.want)
+		}
 	}
 }
 
