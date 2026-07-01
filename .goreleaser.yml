@@ -1,0 +1,70 @@
+version: 2
+
+project_name: naeryeo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: naeryeo
+    main: ./cmd/naeryeo
+    binary: naeryeo
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: naeryeo
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: GyeongHoKim
+    name: naeryeo
+
+homebrew_casks:
+  - name: naeryeo
+    repository:
+      owner: GyeongHoKim
+      name: homebrew-tap
+    directory: Casks
+    homepage: "https://github.com/GyeongHoKim/naeryeo"
+    description: "CLI + MCP stdio server for Korean public-transit routing"
+    license: "MIT"
+
+scoops:
+  - name: naeryeo
+    repository:
+      owner: GyeongHoKim
+      name: scoop-bucket
+    homepage: "https://github.com/GyeongHoKim/naeryeo"
+    description: "CLI + MCP stdio server for Korean public-transit routing"
+    license: MIT

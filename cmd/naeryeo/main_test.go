@@ -1,0 +1,40 @@
+package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+)
+
+func TestRun(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantCode   int
+		wantStdout string
+		wantStderr string
+	}{
+		{name: "no arguments prints usage", args: nil, wantCode: 1, wantStderr: "usage: naeryeo"},
+		{name: "version flag", args: []string{"--version"}, wantCode: 0, wantStdout: "dev"},
+		{name: "setup stub", args: []string{"setup"}, wantCode: 1, wantStderr: "not yet implemented"},
+		{name: "route stub", args: []string{"route"}, wantCode: 1, wantStderr: "not yet implemented"},
+		{name: "mcp stub", args: []string{"mcp"}, wantCode: 1, wantStderr: "not yet implemented"},
+		{name: "unknown command", args: []string{"bogus"}, wantCode: 1, wantStderr: "unknown command"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			got := run(tt.args, &stdout, &stderr)
+			if got != tt.wantCode {
+				t.Errorf("run(%v) = %d, want %d", tt.args, got, tt.wantCode)
+			}
+			if tt.wantStdout != "" && !strings.Contains(stdout.String(), tt.wantStdout) {
+				t.Errorf("stdout = %q, want substring %q", stdout.String(), tt.wantStdout)
+			}
+			if tt.wantStderr != "" && !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Errorf("stderr = %q, want substring %q", stderr.String(), tt.wantStderr)
+			}
+		})
+	}
+}

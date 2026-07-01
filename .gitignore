@@ -1,0 +1,14 @@
+# Go build artifacts
+/naeryeo
+*.exe
+*.test
+*.out
+
+# GoReleaser output
+/dist/
+
+# Node tooling (commitlint/husky)
+node_modules/
+
+# OS/editor cruft
+.DS_Store

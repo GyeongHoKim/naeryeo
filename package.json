@@ -1,0 +1,14 @@
+{
+  "name": "naeryeo-tooling",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Repo-root dev tooling (commitlint + husky) for naeryeo",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.0",
+    "@commitlint/config-conventional": "^21.2.0",
+    "husky": "^9.1.7"
+  }
+}
