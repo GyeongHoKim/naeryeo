@@ -8,6 +8,16 @@ Claude Desktop, Claude Code 등 MCP 클라이언트에서 자연어로 대한민
 
 ## 설치
 
+### Skills 디렉터리 (Claude Code · Cursor 등 · 권장)
+
+Claude Code, Cursor 같은 AI 에이전트를 쓴다면 [skills.sh](https://skills.sh)를 통해 한 번에 설치하는 것을 권장합니다:
+
+```bash
+npx skills add GyeongHoKim/naeryeo
+```
+
+설치된 스킬이 에이전트에게 naeryeo 설치·설정·사용법을 안내합니다. 이후 아래 방법 중 하나로 `naeryeo` 바이너리를 설치하고 `naeryeo setup`으로 ODsay 키만 등록하면 됩니다.
+
 ### Homebrew (macOS / Linux)
 
 ```bash
