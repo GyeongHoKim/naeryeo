@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/GyeongHoKim/naeryeo/internal/config"
 )
 
 // version is overwritten via -ldflags at build time (see .goreleaser.yml).
@@ -23,7 +25,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	switch args[0] {
 	case "setup":
-		return notImplemented(stderr, "setup")
+		return runSetup(args[1:], os.Stdin, stdout, stderr, config.Save)
+	case "logout":
+		return runLogout(args[1:], stdout, stderr, config.Load, config.Delete)
 	case "route":
 		return notImplemented(stderr, "route")
 	case "mcp":
@@ -51,7 +55,7 @@ func notImplemented(w io.Writer, cmd string) int {
 }
 
 func printUsage(w io.Writer) {
-	if _, err := fmt.Fprintln(w, "usage: naeryeo <setup|route|mcp|--version>"); err != nil {
+	if _, err := fmt.Fprintln(w, "usage: naeryeo <setup|logout|route|mcp|--version>"); err != nil {
 		return
 	}
 }

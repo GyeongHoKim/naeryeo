@@ -32,7 +32,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 **Purpose**: go-keyring 의존성을 모듈에 반영
 
-- [ ] T001 저장소 루트에서 `go get github.com/zalando/go-keyring@latest` 실행 후
+- [X] T001 저장소 루트에서 `go get github.com/zalando/go-keyring@latest` 실행 후
       `go mod tidy`로 `go.mod`/`go.sum`을 갱신한다.
 
 ---
@@ -44,7 +44,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 **⚠️ CRITICAL**: 아래 태스크 완료 전까지 Phase 3 이후 착수 금지
 
-- [ ] T002 `internal/config/config.go`를 새로 만들고 다음을 정의한다: 서비스/사용자
+- [X] T002 `internal/config/config.go`를 새로 만들고 다음을 정의한다: 서비스/사용자
       상수(`serviceName = "naeryeo"`, `keyUsername = "odsay-api-key"`), sentinel
       에러(`ErrNotConfigured`, `ErrKeychainUnavailable`, `ErrEmptyValue`,
       `ErrValueTooLarge`), go-keyring 호출을 감싸는 비공개 인터페이스
@@ -54,7 +54,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
       패키지 함수로 구현하는 `goKeyringBackend` 구조체, 그리고 테스트에서
       교체 가능한 패키지 변수 `var backend keyringBackend = goKeyringBackend{}`.
       (data-model.md, contracts/config-package.md 참조)
-- [ ] T003 `internal/config/config.go`에 공용 에러 변환 헬퍼
+- [X] T003 `internal/config/config.go`에 공용 에러 변환 헬퍼
       `wrapBackendErr(err error) error`를 구현한다: `nil`→`nil`,
       `errors.Is(err, keyring.ErrNotFound)`→`ErrNotConfigured`,
       `errors.Is(err, keyring.ErrSetDataTooBig)`→`ErrValueTooLarge`(래핑),
@@ -62,7 +62,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
       그 외 모든 non-nil 에러(예: Linux에서 D-Bus 연결 실패처럼 sentinel이 아닌
       에러, research.md §1 참조)도 기본적으로 `ErrKeychainUnavailable`로
       래핑한다(`%w`로 원인 보존). (depends on T002)
-- [ ] T004 [P] `internal/config/doc.go`의 "placeholder" 문구를 제거하고 실제
+- [X] T004 [P] `internal/config/doc.go`의 "placeholder" 문구를 제거하고 실제
       `Save`/`Load`/`Delete` 표면을 설명하도록 패키지 doc 주석을 갱신한다.
 
 **Checkpoint**: 패키지 골격과 에러 모델이 준비됨 — 이제 사용자 스토리 구현 가능
@@ -82,12 +82,12 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 > **NOTE: 아래 테스트를 먼저 작성하고, 구현 전에는 실패(또는 컴파일 실패)함을 확인한다**
 
-- [ ] T005 [P] [US1] `internal/config/config_test.go`에 `Save`에 대한 테이블 기반
+- [X] T005 [P] [US1] `internal/config/config_test.go`에 `Save`에 대한 테이블 기반
       테스트를 추가한다: 빈 문자열 입력 → `ErrEmptyValue`; 최초 저장 성공 후
       `keyring.Get`으로 직접 조회해 동일 값 확인; 기존 값이 있는 상태에서 재호출
       시 덮어쓰기 확인; `backend`를 `ErrUnsupportedPlatform`을 반환하는 가짜
       구현으로 교체했을 때 `ErrKeychainUnavailable` 확인.
-- [ ] T006 [P] [US1] `cmd/naeryeo/setup_test.go`에 `runSetup`에 대한 테스트를
+- [X] T006 [P] [US1] `cmd/naeryeo/setup_test.go`에 `runSetup`에 대한 테스트를
       추가한다: 유효한 키가 담긴 stdin 입력 → trim된 값으로 주입된 save 함수가
       호출되고 종료 코드 0; save 함수가 `config.ErrKeychainUnavailable`을
       반환 → 0이 아닌 종료 코드와 stderr 에러 메시지; 빈 줄 입력 → save 함수를
@@ -95,16 +95,16 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] `internal/config/config.go`에 `Save(apiKey string) error`를
+- [X] T007 [P] [US1] `internal/config/config.go`에 `Save(apiKey string) error`를
       구현한다: `apiKey == ""`면 `ErrEmptyValue` 반환, 아니면
       `backend.Set(serviceName, keyUsername, apiKey)`를 호출하고 결과를
       `wrapBackendErr`로 감싼다. (depends on T002-T004)
-- [ ] T008 [P] [US1] 새 파일 `cmd/naeryeo/setup.go`에
+- [X] T008 [P] [US1] 새 파일 `cmd/naeryeo/setup.go`에
       `runSetup(args []string, stdin io.Reader, stdout, stderr io.Writer, save func(string) error) int`를
       구현한다: stdin에서 한 줄을 읽어 trim하고, 비어 있으면 에러 메시지 후
       종료 코드 1, 아니면 `save`를 호출해 성공/실패 메시지를 출력하고
       성공 시 0, 실패 시 1을 반환한다.
-- [ ] T009 [US1] `cmd/naeryeo/main.go`의 `"setup"` 분기를
+- [X] T009 [US1] `cmd/naeryeo/main.go`의 `"setup"` 분기를
       `notImplemented(stderr, "setup")` 대신
       `runSetup(args[1:], os.Stdin, stdout, stderr, config.Save)` 호출로
       교체한다. (depends on T007, T008)
@@ -125,7 +125,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 ### Tests for User Story 2 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T010 [P] [US2] `internal/config/config_test.go`에 `Load`에 대한 테이블
+- [X] T010 [P] [US2] `internal/config/config_test.go`에 `Load`에 대한 테이블
       기반 테스트를 추가한다: 저장된 값 없음 → `ErrNotConfigured`;
       `keyring.Set`으로 직접 심어둔 값을 정확히 반환; `config.Save` 호출 직후
       `config.Load`가 동일한 값을 반환(왕복 무결성, SC-005); `backend`를
@@ -133,7 +133,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] `internal/config/config.go`에 `Load() (string, error)`를
+- [X] T011 [US2] `internal/config/config.go`에 `Load() (string, error)`를
       구현한다: `backend.Get(serviceName, keyUsername)`를 호출하고 결과를
       `wrapBackendErr`로 감싼다. (depends on T002-T004)
 
@@ -152,27 +152,27 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 ### Tests for User Story 3 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T012 [P] [US3] `internal/config/config_test.go`에 `Delete`에 대한 테이블
+- [X] T012 [P] [US3] `internal/config/config_test.go`에 `Delete`에 대한 테이블
       기반 테스트를 추가한다: 값이 있는 상태에서 삭제 후 `keyring.Get`으로
       직접 확인 시 없음; 값이 없는 상태에서 호출 시 `nil`(idempotent, FR-009);
       `backend`를 `ErrUnsupportedPlatform` 반환 가짜 구현으로 교체 시
       `ErrKeychainUnavailable`.
-- [ ] T013 [P] [US3] `cmd/naeryeo/logout_test.go`에 `runLogout`에 대한 테스트를
+- [X] T013 [P] [US3] `cmd/naeryeo/logout_test.go`에 `runLogout`에 대한 테스트를
       추가한다: 삭제 함수가 성공 → 종료 코드 0과 성공 메시지; 삭제 함수가
       `config.ErrKeychainUnavailable` 반환 → 0이 아닌 종료 코드와 stderr
       에러 메시지.
 
 ### Implementation for User Story 3
 
-- [ ] T014 [P] [US3] `internal/config/config.go`에 `Delete() error`를
+- [X] T014 [P] [US3] `internal/config/config.go`에 `Delete() error`를
       구현한다: `backend.Delete(serviceName, keyUsername)`를 호출하고,
       `errors.Is(err, keyring.ErrNotFound)`인 경우 `nil`을 반환하며(FR-009),
       그 외 에러는 `wrapBackendErr`로 감싼다. (depends on T002-T004)
-- [ ] T015 [P] [US3] 새 파일 `cmd/naeryeo/logout.go`에
+- [X] T015 [P] [US3] 새 파일 `cmd/naeryeo/logout.go`에
       `runLogout(args []string, stdout, stderr io.Writer, del func() error) int`를
       구현한다: `del`을 호출해 성공/실패 메시지를 출력하고 성공 시 0, 실패
       시 1을 반환한다.
-- [ ] T016 [US3] `cmd/naeryeo/main.go`의 `"logout"` 분기를
+- [X] T016 [US3] `cmd/naeryeo/main.go`의 `"logout"` 분기를
       `notImplemented(stderr, "logout")` 대신
       `runLogout(args[1:], stdout, stderr, config.Delete)` 호출로 교체한다.
       (depends on T014, T015)
@@ -193,7 +193,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 ### Tests for User Story 4 (MANDATORY per Constitution Principle II) ⚠️
 
-- [ ] T017 [P] [US4] `internal/config/config_test.go`에 `Save`/`Load`/`Delete`
+- [X] T017 [P] [US4] `internal/config/config_test.go`에 `Save`/`Load`/`Delete`
       3개 함수를 모두 커버하는 결합 테이블 테스트를 추가한다: `backend`를
       `keyring.ErrUnsupportedPlatform`이 아닌 **임의의 불투명한 에러**(예:
       `errors.New("dbus: could not connect: no such file or directory")`,
@@ -204,7 +204,7 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 ### Implementation for User Story 4
 
-- [ ] T018 [US4] `specs/001-keychain-api-key/quickstart.md` §3 절차에 따라
+- [X] T018 [US4] `specs/001-keychain-api-key/quickstart.md` §3 절차에 따라
       Secret Service가 없는 Linux 컨테이너(예: 최소 `debian:stable`, D-Bus
       세션 없음)에서 `go run ./cmd/naeryeo setup`을 수동 실행해 (a) 0이 아닌
       종료 코드와 명확한 에러 메시지, (b) `grep -r`로 컨테이너 파일시스템
@@ -220,12 +220,12 @@ Go 표준 단일 프로젝트 레이아웃, `plan.md`의 Project Structure를 �
 
 **Purpose**: 스토리 전반에 걸친 마무리
 
-- [ ] T019 [P] 저장소 루트에서 `just fmt`, `just lint`, `just test`(`just check`)를
+- [X] T019 [P] 저장소 루트에서 `just fmt`, `just lint`, `just test`(`just check`)를
       실행하고 발견된 문제를 모두 수정한다(constitution Principle III).
-- [ ] T020 [P] `cmd/naeryeo/setup.go`/`logout.go`의 실제 출력 메시지를
+- [X] T020 [P] `cmd/naeryeo/setup.go`/`logout.go`의 실제 출력 메시지를
       `README.md`의 문서화된 예시(예: "OS 키체인에 저장 완료")와 비교해
       문구를 맞춘다.
-- [ ] T021 커밋 제안 전, constitution Principle I(idiomatic Go)과 Principle
+- [X] T021 커밋 제안 전, constitution Principle I(idiomatic Go)과 Principle
       II(테스트 커버리지)를 기준으로 변경분을 자체 리뷰한다(AGENTS.md
       Required Workflow 5단계).
 

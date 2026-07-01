@@ -16,7 +16,6 @@ func TestRun(t *testing.T) {
 	}{
 		{name: "no arguments prints usage", args: nil, wantCode: 1, wantStderr: "usage: naeryeo"},
 		{name: "version flag", args: []string{"--version"}, wantCode: 0, wantStdout: "dev"},
-		{name: "setup stub", args: []string{"setup"}, wantCode: 1, wantStderr: "not yet implemented"},
 		{name: "route stub", args: []string{"route"}, wantCode: 1, wantStderr: "not yet implemented"},
 		{name: "mcp stub", args: []string{"mcp"}, wantCode: 1, wantStderr: "not yet implemented"},
 		{name: "unknown command", args: []string{"bogus"}, wantCode: 1, wantStderr: "unknown command"},
