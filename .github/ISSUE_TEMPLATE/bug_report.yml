@@ -1,0 +1,81 @@
+name: 버그 리포트
+description: 예상과 다르게 동작하는 문제를 신고합니다.
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        버그를 신고해 주셔서 감사합니다. 재현에 필요한 정보를 최대한 채워 주세요.
+        먼저 [기존 이슈](https://github.com/GyeongHoKim/naeryeo/issues)에 같은 내용이 있는지 검색해 주시면 좋습니다.
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: 어디서 발생했나요?
+      description: 문제가 발생한 실행 방식을 선택해 주세요.
+      options:
+        - CLI (naeryeo route ...)
+        - MCP 서버 (naeryeo mcp)
+        - 설치 / 설정 (naeryeo setup)
+        - 기타
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 무슨 일이 있었나요?
+      description: 예상한 동작과 실제 동작을 함께 설명해 주세요.
+      placeholder: |
+        예상: 출발지→도착지 경로가 출력되어야 함
+        실제: "unauthorized" 에러가 발생함
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: 재현 방법
+      description: 문제를 재현할 수 있는 단계를 순서대로 적어 주세요.
+      value: |
+        1. `...` 명령을 실행한다
+        2. `...` 를 입력한다
+        3. 에러가 발생한다
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 로그 / 출력
+      description: 관련 로그나 에러 메시지를 붙여넣어 주세요. (ODsay API 키 등 민감 정보는 지워 주세요.)
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: naeryeo 버전
+      description: "`naeryeo --version` 출력값"
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 실행 환경
+      description: OS 및 아키텍처, 설치 방식(Homebrew/Scoop/go install 등)
+      placeholder: "macOS 14 arm64 / Homebrew"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 확인 사항
+      options:
+        - label: 기존 이슈에서 중복되는 내용을 검색했습니다.
+          required: true
+        - label: 로그에서 API 키 등 민감 정보를 제거했습니다.
+          required: true
