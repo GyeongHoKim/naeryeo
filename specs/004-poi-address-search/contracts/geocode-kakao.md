@@ -34,7 +34,8 @@ func NewKakao(apiKey string) *Kakao
 |---|---|
 | `documents` 비어있지 않음 | `Coordinate{X: parse(documents[0].x), Y: parse(documents[0].y)}`, nil |
 | `documents` 길이 0 | `core.Coordinate{}`, `core.ErrGeocoderNotFound` |
-| HTTP 401 또는 403 | `core.Coordinate{}`, `core.ErrGeocoderAuthFailed` |
+| HTTP 401 (키 무효) | `core.Coordinate{}`, `core.ErrGeocoderAuthFailed` |
+| HTTP 403 (키는 유효하나 요청 거부 — 서비스 미활성/도메인·IP 제한) | `core.Coordinate{}`, `core.ErrGeocoderForbidden` |
 | 2xx 아님(그 외)·네트워크·타임아웃·JSON 파싱 실패 | `core.Coordinate{}`, `core.ErrGeocoderUnavailable` |
 
 > 이 sentinel들은 core 소유(에러 계약)다. geocode는 core를 단방향 import해 이들을 반환하며,
@@ -55,5 +56,6 @@ func NewKakao(apiKey string) *Kakao
 
 ## 테스트 계약(요지)
 
-`httptest.Server`로 각 분기(1건/다건→첫 건/0건/401/500/깨진 JSON) 테이블 테스트.
+`httptest.Server`로 각 분기(1건/다건→첫 건/0건/401→AuthFailed/403→Forbidden/500/깨진 JSON)
+테이블 테스트.
 `Authorization` 헤더가 `KakaoAK <key>` 형식으로 전송되는지, `query`가 URL 인코딩되는지 검증.

@@ -18,11 +18,18 @@ var (
 	// ErrUpstreamUnavailable indicates a network error, timeout, or ODsay
 	// server-side failure.
 	ErrUpstreamUnavailable = errors.New("core: ODsay is unavailable")
-	// ErrGeocoderAuthFailed indicates the geocoder fallback rejected the
-	// place-search API key as unauthenticated. It is kept distinct from
-	// ErrPointNotFound so callers can tell "the place-search key is invalid"
-	// apart from "the name matched nothing".
+	// ErrGeocoderAuthFailed indicates the geocoder rejected the place-search
+	// API key as unauthenticated (HTTP 401) — the key is missing, wrong, or
+	// expired, so re-registering it may help. Kept distinct from
+	// ErrPointNotFound so callers can tell "the key is invalid" apart from
+	// "the name matched nothing".
 	ErrGeocoderAuthFailed = errors.New("core: geocoder rejected the API key")
+	// ErrGeocoderForbidden indicates the geocoder accepted the key but denied
+	// the request (HTTP 403) — e.g. the required map/local service is not
+	// enabled for the app, or a domain/IP restriction applies. Re-registering
+	// the same key will NOT help; the fix is in the provider's app settings,
+	// so this is kept distinct from ErrGeocoderAuthFailed.
+	ErrGeocoderForbidden = errors.New("core: geocoder denied the request")
 	// ErrGeocoderNotFound is the not-found signal a Geocoder returns when a
 	// name matches no place. resolveStation folds it into the same
 	// "unrecognized point" handling as a failed station search.

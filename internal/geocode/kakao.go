@@ -72,8 +72,10 @@ func (k *Kakao) logger() *slog.Logger {
 // Resolve returns the coordinate of the top keyword-search match for query.
 // It returns the Geocoder error-contract sentinels defined in core:
 // core.ErrGeocoderNotFound if nothing matches, core.ErrGeocoderAuthFailed if
-// the API key is rejected (HTTP 401/403), and core.ErrGeocoderUnavailable for
-// any network error, timeout, non-2xx status, or unparseable response.
+// the key is rejected (HTTP 401), core.ErrGeocoderForbidden if the request is
+// denied (HTTP 403 — e.g. the map/local service is not enabled for the app),
+// and core.ErrGeocoderUnavailable for any network error, timeout, other
+// non-2xx status, or unparseable response.
 func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, error) {
 	// size=1: only the representative (top-ranked) match is needed;
 	// sort=accuracy is Kakao's default but set explicitly for clarity.
@@ -95,8 +97,13 @@ func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, err
 
 	k.logger().Debug("geocode: keyword search", "query", query, "status", resp.StatusCode)
 
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+	if resp.StatusCode == http.StatusUnauthorized {
 		return core.Coordinate{}, core.ErrGeocoderAuthFailed
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		// 403 = key accepted but request denied (service not enabled for the
+		// app, or domain/IP restriction). Distinct from an invalid key (401).
+		return core.Coordinate{}, core.ErrGeocoderForbidden
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return core.Coordinate{}, fmt.Errorf("%w: unexpected HTTP status %d", core.ErrGeocoderUnavailable, resp.StatusCode)

@@ -50,10 +50,11 @@ type Geocoder interface {
 - 성공: 대표(최상위) 후보 1건의 `Coordinate` 반환, `nil`.
 - 결과 0건: `core.ErrGeocoderNotFound` 반환 → core 폴백이 내부 `errStationNotFound`로 접음 →
   `FindRoute`가 `ErrPointNotFound{Side}`로 변환(FR-008).
-- 인증 실패: `core.ErrGeocoderAuthFailed` 반환(그대로 전파, FR-009).
-- 그 외(타임아웃/네트워크/5xx/파싱): `core.ErrGeocoderUnavailable` 반환(그대로 전파, FR-009).
+- 키 무효(401): `core.ErrGeocoderAuthFailed` 반환(그대로 전파, FR-009).
+- 요청 거부(403, 서비스 미활성·도메인/IP 제한): `core.ErrGeocoderForbidden` 반환(그대로 전파, FR-009).
+- 그 외(타임아웃/네트워크/기타 비2xx/파싱): `core.ErrGeocoderUnavailable` 반환(그대로 전파, FR-009).
 
-> `ErrGeocoderNotFound`/`ErrGeocoderAuthFailed`/`ErrGeocoderUnavailable`은 모두 core 소유이며
+> `ErrGeocoderNotFound`/`ErrGeocoderAuthFailed`/`ErrGeocoderForbidden`/`ErrGeocoderUnavailable`은 모두 core 소유이며
 > `Geocoder` 인터페이스의 에러 계약을 이룬다. geocode는 이 core sentinel들을 반환하고, core의
 > `resolveStation` 폴백 분기가 `errors.Is`로 분류한다.
 
@@ -71,7 +72,7 @@ type Geocoder interface {
    유지): `stationCandidate{X: flexibleFloat(coord.X), Y: flexibleFloat(coord.Y)}`. `Name`은
    비워 둔다(현재 결과 표현에 정류장명이 쓰이지 않음).
    - `Resolve`가 `core.ErrGeocoderNotFound`이면 `errStationNotFound`로 접어 전파(→ ErrPointNotFound).
-   - `Resolve`가 `core.ErrGeocoderAuthFailed`/`core.ErrGeocoderUnavailable`이면 그대로 전파.
+   - `Resolve`가 `core.ErrGeocoderAuthFailed`/`core.ErrGeocoderForbidden`/`core.ErrGeocoderUnavailable`이면 그대로 전파.
 3. `c.Geocoder == nil`이면 기존과 동일하게 `errStationNotFound` 전파.
 
 `FindRoute`는 from/to 각각에 위 흐름을 독립 적용(혼합 입력 지원, spec Edge Case).
@@ -84,8 +85,9 @@ type Geocoder interface {
 | 심볼 | 종류 | 발생 / 변환되는 사용자 결과 |
 |---|---|---|
 | `ErrGeocoderNotFound` | 신규 sentinel | 지오코더 0건 → core가 `errStationNotFound`로 접음 → `ErrPointNotFound`(FR-008) |
-| `ErrGeocoderAuthFailed` | 신규 sentinel | 지오코더 401/403 → "장소 검색 키가 유효하지 않음"(FR-009, 미검색과 구분) |
-| `ErrGeocoderUnavailable` | 신규 sentinel | 지오코더 타임아웃/5xx/파싱 → "장소 검색 서비스 연결 불가"(FR-009) |
+| `ErrGeocoderAuthFailed` | 신규 sentinel | 지오코더 401(키 무효) → "장소 검색 키가 유효하지 않음. 재등록"(FR-009) |
+| `ErrGeocoderForbidden` | 신규 sentinel | 지오코더 403(서비스 미활성/제한) → "provider 앱 설정 확인"(FR-009, 재등록으로 안 고쳐짐) |
+| `ErrGeocoderUnavailable` | 신규 sentinel | 지오코더 타임아웃/기타 비2xx/파싱 → "장소 검색 서비스 연결 불가"(FR-009) |
 | `ErrPointNotFound` | 기존 재사용 | 어느 쪽(from/to) 미해석인지 안내(FR-008) |
 
 ## 6. Kakao 응답 매핑 (internal/geocode)
@@ -97,8 +99,9 @@ Kakao 키워드 검색 응답 → `core.Coordinate`.
 | `documents[0].x` (문자열, 경도) | `Coordinate.X`(`ParseFloat`) |
 | `documents[0].y` (문자열, 위도) | `Coordinate.Y`(`ParseFloat`) |
 | `documents` 길이 0 | → `core.ErrGeocoderNotFound`(core가 `errStationNotFound`로 접음) |
-| HTTP 401/403 | → `core.ErrGeocoderAuthFailed` |
-| 그 외 실패(타임아웃/네트워크/5xx/파싱) | → `core.ErrGeocoderUnavailable` |
+| HTTP 401 | → `core.ErrGeocoderAuthFailed` |
+| HTTP 403 | → `core.ErrGeocoderForbidden` |
+| 그 외 실패(타임아웃/네트워크/기타 비2xx/파싱) | → `core.ErrGeocoderUnavailable` |
 
 `place_name`/`address_name`/`road_address_name`은 현재 결과 표현에 불필요하므로 좌표만 사용
 (향후 후보 표시 기능 도입 시 활용 여지 — 현재 범위 밖).

@@ -100,6 +100,8 @@ func routeErrorMessage(err error, geocoderConfigured bool) string {
 		return "저장된 API 키가 유효하지 않습니다. naeryeo setup으로 다시 등록하세요"
 	case errors.Is(err, core.ErrGeocoderAuthFailed):
 		return "장소 검색 키가 유효하지 않습니다. naeryeo setup --geocoder로 다시 등록하세요"
+	case errors.Is(err, core.ErrGeocoderForbidden):
+		return "장소 검색 서비스(Kakao) 권한이 거부되었습니다. Kakao 개발자 콘솔에서 해당 앱의 카카오맵(로컬) 서비스를 활성화했는지, 키의 도메인·IP 제한 설정을 확인하세요"
 	case errors.As(err, &pointErr):
 		msg := fmt.Sprintf("%s을(를) 찾을 수 없습니다: %q", sideLabel(pointErr.Side), pointErr.Name)
 		if !geocoderConfigured {

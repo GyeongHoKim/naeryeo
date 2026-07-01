@@ -36,8 +36,11 @@ naeryeo route --from <출발지> --to <도착지>
   않았던** 경우, 기존 "출발지/도착지를 찾을 수 없습니다" 메시지에 이어
   "건물명·주소로 찾으려면 `naeryeo setup --geocoder`로 장소 검색 키를 설정하세요" 힌트를
   덧붙인다. 지오코더 키가 있었으면 힌트를 붙이지 않는다.
-- 지오코더 인증 실패(`ErrGeocoderAuthFailed`) → "장소 검색 키가 유효하지 않습니다.
+- 지오코더 키 무효(`ErrGeocoderAuthFailed`, HTTP 401) → "장소 검색 키가 유효하지 않습니다.
   `naeryeo setup --geocoder`로 다시 등록하세요"(ODsay 인증 실패 문구와 대칭).
+- 지오코더 요청 거부(`ErrGeocoderForbidden`, HTTP 403) → "장소 검색 서비스(Kakao) 권한이
+  거부되었습니다. 앱의 카카오맵(로컬) 서비스 활성화·도메인/IP 제한을 확인하세요"(재등록이
+  아니라 앱 설정이 해법이므로 401과 구분).
 
 ## mcp — 배선 대칭
 

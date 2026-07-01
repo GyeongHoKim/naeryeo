@@ -116,7 +116,9 @@ func newFindRoute(logger *slog.Logger) func(ctx context.Context, apiKey, from, t
 		client := core.NewClient(apiKey)
 		client.Logger = logger
 		if gk, err := config.Load(config.GeocoderAPIKey); err == nil && gk != "" {
-			client.Geocoder = geocode.NewKakao(gk)
+			kakao := geocode.NewKakao(gk)
+			kakao.Logger = logger
+			client.Geocoder = kakao
 		}
 		return client.FindRoute(ctx, from, to)
 	}

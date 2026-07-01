@@ -72,9 +72,9 @@ func TestKakaoResolve_ErrorMapping(t *testing.T) {
 			wantErr: core.ErrGeocoderAuthFailed,
 		},
 		{
-			name:    "HTTP 403 maps to ErrGeocoderAuthFailed",
+			name:    "HTTP 403 maps to ErrGeocoderForbidden (key valid, service denied)",
 			handler: func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) },
-			wantErr: core.ErrGeocoderAuthFailed,
+			wantErr: core.ErrGeocoderForbidden,
 		},
 		{
 			name:    "HTTP 500 maps to ErrGeocoderUnavailable",

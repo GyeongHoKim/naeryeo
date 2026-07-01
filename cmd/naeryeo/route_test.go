@@ -78,6 +78,16 @@ func TestRouteErrorMessage(t *testing.T) {
 			t.Errorf("msg = %q, want the geocoder-unavailable message", msg)
 		}
 	})
+
+	t.Run("geocoder forbidden points at app service settings, not re-registration", func(t *testing.T) {
+		msg := routeErrorMessage(core.ErrGeocoderForbidden, true)
+		if !strings.Contains(msg, "권한이 거부") || !strings.Contains(msg, "활성화") {
+			t.Errorf("msg = %q, want it to point at enabling the service", msg)
+		}
+		if strings.Contains(msg, "다시 등록") {
+			t.Errorf("msg = %q, should NOT tell the user to re-register the key for a 403", msg)
+		}
+	})
 }
 
 func TestRunRoute_FR007Hint(t *testing.T) {

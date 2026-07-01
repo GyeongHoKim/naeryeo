@@ -77,8 +77,9 @@ import해 이 core sentinel들을 반환하고, core의 `resolveStation` 폴백�
 | 상황 | geocode 반환(= core sentinel) | core 처리 | 사용자 결과 |
 |---|---|---|---|
 | `documents` 비어 있음(0건) | `core.ErrGeocoderNotFound` | `errStationNotFound`(비공개)로 접음 | `ErrPointNotFound{Side}` (FR-008) |
-| HTTP 401/403(키 무효) | `core.ErrGeocoderAuthFailed` | 그대로 전파 | "장소 검색 키가 유효하지 않음"(FR-009) |
-| 타임아웃/네트워크/5xx/JSON 파싱 실패 | `core.ErrGeocoderUnavailable` | 그대로 전파 | "장소 검색 서비스 연결 불가"(FR-009) |
+| HTTP 401(키 무효) | `core.ErrGeocoderAuthFailed` | 그대로 전파 | "키가 유효하지 않음. 재등록"(FR-009) |
+| HTTP 403(키는 유효하나 요청 거부) | `core.ErrGeocoderForbidden` | 그대로 전파 | "앱의 지도/로컬 서비스 활성화·제한 확인"(FR-009) |
+| 타임아웃/네트워크/기타 비2xx/JSON 파싱 실패 | `core.ErrGeocoderUnavailable` | 그대로 전파 | "장소 검색 서비스 연결 불가"(FR-009) |
 
 **Rationale**: "검색 결과 없음"을 기존 정류장 미검색과 동일한 `errStationNotFound`로 접으면
 FindRoute의 기존 not-found 처리 경로를 그대로 재사용할 수 있다(중복 최소화). 인증/불가용은
@@ -90,8 +91,12 @@ FindRoute의 기존 not-found 처리 경로를 그대로 재사용할 수 있다
 sentinel(및 `Coordinate`, 인터페이스)을 모두 소비자인 core가 소유하도록 정정했다. core는 구현
 패키지를 import하지 않으므로 단방향(geocode→core)만 남아 순환이 없다.
 
-**미확인 사항**: 실제 Kakao 인증 실패 코드/바디는 실측 필요(§1과 동일). 확인 전에는 401/403을
-`core.ErrGeocoderAuthFailed`로 매핑하는 best-effort 구조를 두고, 실측 후 세분화한다.
+**실측 확인(2026-07-02)**: 실제 Kakao 키로 검증한 결과, 잘못된/미인가 요청은 **HTTP 403**과
+`{"errorType":"NotAuthorizedError","message":"App(...) disabled OPEN_MAP_AND_LOCAL service."}`
+바디를 반환했다(키 자체는 유효하나 앱에 카카오맵/로컬 서비스 미활성). 이에 따라 **401=키 무효
+(`ErrGeocoderAuthFailed`, 재등록이 해법)와 403=요청 거부(`ErrGeocoderForbidden`, 앱 설정이 해법)를
+분리**했다 — 사용자 조치가 다르기 때문. 바디 문자열 파싱에 의존하지 않고 상태코드로만 구분해
+Kakao 특화 결합을 피한다.
 
 **리스크 (구현 시 검증 필요) — 정류장 에러 코드가 폴백을 건너뛸 가능성**: 현재
 `classifyODsayError`(`internal/core/client.go:157-177`)는 `resolveStation`(정류장 검색)과
