@@ -60,6 +60,13 @@ homebrew_casks:
     homepage: "https://github.com/GyeongHoKim/naeryeo"
     description: "CLI + MCP stdio server for Korean public-transit routing"
     license: "MIT"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr",
+              args: ["-dr", "com.apple.quarantine", "#{staged_path}/naeryeo"]
+          end
 
 scoops:
   - name: naeryeo
