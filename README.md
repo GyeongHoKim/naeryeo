@@ -163,6 +163,25 @@ Claude Desktop 등 MCP 클라이언트에 붙여, 대화 중 자연어로 경로
 
 ---
 
+## 3. 원격 MCP 서버(Streamable HTTP) — 클라우드 배포용
+
+PlayMCP 같은 원격 MCP 플랫폼에 올리기 위한 서버 모드입니다. **일반 사용자는 위의 1·2번 방식이면 충분합니다** — 이 모드는 서비스를 직접 호스팅하려는 경우에만 필요합니다.
+
+로컬 모드와 달리 ODsay·OS 키체인을 사용하지 않고, 자체 호스팅 [MOTIS](https://github.com/motis-project/motis) 라우팅 백엔드(KTDB 전국 GTFS + OSM)를 사용합니다. 사용자 API 키가 전혀 필요 없습니다.
+
+```bash
+NAERYEO_MOTIS_URL=https://motis.example.com naeryeo mcp --http
+```
+
+| 환경변수/플래그 | 설명 |
+| --- | --- |
+| `NAERYEO_MOTIS_URL` | **필수.** MOTIS 백엔드 base URL. 미설정 시 기동 실패 |
+| `PORT` | 리슨 포트 (기본 8080) |
+| `--addr` | 리슨 주소 직접 지정 (`PORT`보다 우선) |
+
+- 엔드포인트: `/`(MCP Streamable HTTP, stateless) · `GET /healthz`(생존 확인)
+- 컨테이너: 저장소 루트의 `Dockerfile`로 빌드 (`docker build --platform linux/amd64 …`)
+
 ## 명령어
 
 | 명령어 | 설명 |
@@ -172,20 +191,23 @@ Claude Desktop 등 MCP 클라이언트에 붙여, 대화 중 자연어로 경로
 | `naeryeo logout` | 저장된 ODsay API 키 삭제 |
 | `naeryeo logout --geocoder` | 저장된 장소 검색 API 키 삭제 |
 | `naeryeo route --from <출발지> --to <도착지>` | 경로 검색 (CLI 모드) |
-| `naeryeo mcp` | MCP stdio 서버로 기동 |
+| `naeryeo mcp` | MCP stdio 서버로 기동 (로컬) |
+| `naeryeo mcp --http` | MCP Streamable HTTP 서버로 기동 (클라우드, MOTIS 백엔드) |
 | `naeryeo --version` | 버전 확인 |
 
 ## 아키텍처
 
 ```
 naeryeo/
-  cmd/naeryeo/       # 서브커맨드 진입점 (setup, route, mcp)
+  cmd/naeryeo/       # 서브커맨드 진입점 (setup, route, mcp[--http])
   internal/core/     # 경로 검색 로직 (ODsay 클라이언트, 공용 도메인 모델, Geocoder 인터페이스)
+  internal/motis/    # 클라우드 트랙 라우팅 백엔드 클라이언트 (MOTIS — 지오코딩+경로)
   internal/geocode/  # 장소 검색(지오코딩) 연동 — 건물명·주소 → 좌표 (Kakao)
   internal/config/   # OS 키체인 연동 (go-keyring) 기반 API 키 저장/조회
+  Dockerfile         # 클라우드 트랙 컨테이너 (linux/amd64, mcp --http로 기동)
 ```
 
-CLI와 MCP 모드는 같은 `internal/core` 로직을 공유하며, 진입점만 다릅니다.
+CLI와 MCP 모드는 같은 `internal/core` 도메인 모델을 공유하며, 진입점만 다릅니다. 경로 검색 백엔드는 로컬(ODsay, BYOK)과 클라우드(MOTIS, 자체 호스팅)로 분리되어 있습니다.
 
 ## 사용 API
 

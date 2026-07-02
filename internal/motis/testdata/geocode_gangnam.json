@@ -1,0 +1,40 @@
+[
+  {
+    "type": "STOP",
+    "tokens": [[0, 9]],
+    "name": "강남역",
+    "id": "kr-korea_BS_1100_121000097",
+    "lat": 3.7499930000000006E1,
+    "lon": 1.2702632E2,
+    "level": 0.0,
+    "country": "KR",
+    "tz": "Asia/Seoul",
+    "areas": [
+      {"name": "대한민국", "adminLevel": 2.0},
+      {"name": "서울특별시", "adminLevel": 4.0},
+      {"name": "서초구", "adminLevel": 6.0}
+    ],
+    "score": -34.650001525878906,
+    "modes": ["TRAM"]
+  },
+  {
+    "type": "PLACE",
+    "category": "restaurant_14",
+    "name": "영남관",
+    "id": "node/[4646428760]",
+    "lat": 35.1673719,
+    "lon": 129.0707485,
+    "country": "KR",
+    "tz": "Asia/Seoul",
+    "score": -3.1388888359069824
+  },
+  {
+    "type": "ADDRESS",
+    "name": "영남길",
+    "id": "",
+    "lat": 36.5727352,
+    "lon": 128.719143,
+    "country": "KR",
+    "tz": "Asia/Seoul"
+  }
+]

@@ -1,0 +1,44 @@
+{
+  "requestParameters": {},
+  "from": {"name": "START", "lat": 37.4979, "lon": 127.0276},
+  "to": {"name": "END", "lat": 37.5568, "lon": 126.9237},
+  "direct": [],
+  "itineraries": [
+    {
+      "duration": 2340,
+      "startTime": "2026-07-03T00:00:00Z",
+      "endTime": "2026-07-03T00:39:00Z",
+      "transfers": 1,
+      "legs": [
+        {
+          "mode": "WALK",
+          "from": {"name": "START", "lat": 37.4979, "lon": 127.0276},
+          "to": {"name": "신논현", "stopId": "kr-korea_RS_ACC1_S-1-4125"},
+          "duration": 780,
+          "distance": 825.0
+        },
+        {
+          "mode": "SUBWAY",
+          "routeShortName": "9호선",
+          "from": {"name": "신논현", "stopId": "kr-korea_RS_ACC1_S-1-4125"},
+          "to": {"name": "당산", "stopId": "kr-korea_RS_ACC1_S-1-0237"},
+          "duration": 1080
+        },
+        {
+          "mode": "SUBWAY",
+          "routeShortName": "2호선",
+          "from": {"name": "당산", "stopId": "kr-korea_RS_ACC1_S-1-0237"},
+          "to": {"name": "홍대입구", "stopId": "kr-korea_RS_ACC1_S-1-0239"},
+          "duration": 360
+        },
+        {
+          "mode": "WALK",
+          "from": {"name": "홍대입구", "stopId": "kr-korea_RS_ACC1_S-1-0239"},
+          "to": {"name": "END"},
+          "duration": 120,
+          "distance": 140.0
+        }
+      ]
+    }
+  ]
+}

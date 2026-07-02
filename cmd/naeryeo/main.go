@@ -82,6 +82,18 @@ func run(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	case "route":
 		return runRoute(args[1:], stdout, stderr, loadODsay, loadGeocoder, newFindRoute(logger))
 	case "mcp":
+		httpMode, addrFlag, parseErr := parseMCPFlags(args[1:])
+		if parseErr != nil {
+			if _, err := fmt.Fprintf(stderr, "naeryeo: %v\n", parseErr); err != nil {
+				return 1
+			}
+			return 1
+		}
+		if httpMode {
+			// Cloud (PlayMCP) track: Streamable HTTP + MOTIS backend.
+			// No keychain, no ODsay (specs/005-playmcp-cloud-server).
+			return runMCPHTTPCommand(addrFlag, stderr, logger)
+		}
 		// mcp.StdioTransport binds directly to the process's real
 		// os.Stdin/os.Stdout — the stdout passed into run() is intentionally
 		// not used here (research.md §3 of specs/003-mcp-route-server).

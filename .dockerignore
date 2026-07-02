@@ -1,0 +1,13 @@
+# Keep the KC "Git source build" context lean — only Go sources matter.
+bin/
+dist/
+node_modules/
+specs/
+skills/
+*.md
+!README.md
+.github/
+.specify/
+.claude/
+naeryeo.png
+.DS_Store
