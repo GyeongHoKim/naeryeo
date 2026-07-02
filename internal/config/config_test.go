@@ -31,7 +31,7 @@ func TestSave(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := Save(""); !errors.Is(err, ErrEmptyValue) {
+		if err := Save(ODsayAPIKey, ""); !errors.Is(err, ErrEmptyValue) {
 			t.Fatalf("Save(\"\") error = %v, want ErrEmptyValue", err)
 		}
 	})
@@ -40,10 +40,10 @@ func TestSave(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := Save("first-key"); err != nil {
+		if err := Save(ODsayAPIKey, "first-key"); err != nil {
 			t.Fatalf("Save() error = %v, want nil", err)
 		}
-		got, err := keyring.Get(serviceName, keyUsername)
+		got, err := keyring.Get(serviceName, string(ODsayAPIKey))
 		if err != nil {
 			t.Fatalf("keyring.Get() error = %v, want nil", err)
 		}
@@ -56,13 +56,13 @@ func TestSave(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := Save("old-key"); err != nil {
+		if err := Save(ODsayAPIKey, "old-key"); err != nil {
 			t.Fatalf("Save(old) error = %v, want nil", err)
 		}
-		if err := Save("new-key"); err != nil {
+		if err := Save(ODsayAPIKey, "new-key"); err != nil {
 			t.Fatalf("Save(new) error = %v, want nil", err)
 		}
-		got, err := keyring.Get(serviceName, keyUsername)
+		got, err := keyring.Get(serviceName, string(ODsayAPIKey))
 		if err != nil {
 			t.Fatalf("keyring.Get() error = %v, want nil", err)
 		}
@@ -74,7 +74,7 @@ func TestSave(t *testing.T) {
 	t.Run("backend unavailable surfaces ErrKeychainUnavailable", func(t *testing.T) {
 		withBackend(t, unavailableBackend{err: keyring.ErrUnsupportedPlatform})
 
-		if err := Save("some-key"); !errors.Is(err, ErrKeychainUnavailable) {
+		if err := Save(ODsayAPIKey, "some-key"); !errors.Is(err, ErrKeychainUnavailable) {
 			t.Fatalf("Save() error = %v, want ErrKeychainUnavailable", err)
 		}
 	})
@@ -85,7 +85,7 @@ func TestLoad(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		_, err := Load()
+		_, err := Load(ODsayAPIKey)
 		if !errors.Is(err, ErrNotConfigured) {
 			t.Fatalf("Load() error = %v, want ErrNotConfigured", err)
 		}
@@ -95,10 +95,10 @@ func TestLoad(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := keyring.Set(serviceName, keyUsername, "seeded-key"); err != nil {
+		if err := keyring.Set(serviceName, string(ODsayAPIKey), "seeded-key"); err != nil {
 			t.Fatalf("keyring.Set() error = %v, want nil", err)
 		}
-		got, err := Load()
+		got, err := Load(ODsayAPIKey)
 		if err != nil {
 			t.Fatalf("Load() error = %v, want nil", err)
 		}
@@ -111,10 +111,10 @@ func TestLoad(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := Save("round-trip-key"); err != nil {
+		if err := Save(ODsayAPIKey, "round-trip-key"); err != nil {
 			t.Fatalf("Save() error = %v, want nil", err)
 		}
-		got, err := Load()
+		got, err := Load(ODsayAPIKey)
 		if err != nil {
 			t.Fatalf("Load() error = %v, want nil", err)
 		}
@@ -126,7 +126,7 @@ func TestLoad(t *testing.T) {
 	t.Run("backend unavailable surfaces ErrKeychainUnavailable", func(t *testing.T) {
 		withBackend(t, unavailableBackend{err: keyring.ErrUnsupportedPlatform})
 
-		if _, err := Load(); !errors.Is(err, ErrKeychainUnavailable) {
+		if _, err := Load(ODsayAPIKey); !errors.Is(err, ErrKeychainUnavailable) {
 			t.Fatalf("Load() error = %v, want ErrKeychainUnavailable", err)
 		}
 	})
@@ -137,13 +137,13 @@ func TestDelete(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := keyring.Set(serviceName, keyUsername, "to-delete"); err != nil {
+		if err := keyring.Set(serviceName, string(ODsayAPIKey), "to-delete"); err != nil {
 			t.Fatalf("keyring.Set() error = %v, want nil", err)
 		}
-		if err := Delete(); err != nil {
+		if err := Delete(ODsayAPIKey); err != nil {
 			t.Fatalf("Delete() error = %v, want nil", err)
 		}
-		if _, err := keyring.Get(serviceName, keyUsername); !errors.Is(err, keyring.ErrNotFound) {
+		if _, err := keyring.Get(serviceName, string(ODsayAPIKey)); !errors.Is(err, keyring.ErrNotFound) {
 			t.Fatalf("keyring.Get() error = %v, want keyring.ErrNotFound", err)
 		}
 	})
@@ -152,7 +152,7 @@ func TestDelete(t *testing.T) {
 		keyring.MockInit()
 		withBackend(t, goKeyringBackend{})
 
-		if err := Delete(); err != nil {
+		if err := Delete(ODsayAPIKey); err != nil {
 			t.Fatalf("Delete() error = %v, want nil", err)
 		}
 	})
@@ -160,10 +160,70 @@ func TestDelete(t *testing.T) {
 	t.Run("backend unavailable surfaces ErrKeychainUnavailable", func(t *testing.T) {
 		withBackend(t, unavailableBackend{err: keyring.ErrUnsupportedPlatform})
 
-		if err := Delete(); !errors.Is(err, ErrKeychainUnavailable) {
+		if err := Delete(ODsayAPIKey); !errors.Is(err, ErrKeychainUnavailable) {
 			t.Fatalf("Delete() error = %v, want ErrKeychainUnavailable", err)
 		}
 	})
+}
+
+// TestCredentialIndependence verifies that the two credentials are stored as
+// separate keychain entries: saving, overwriting, or deleting one never
+// affects the other (spec FR-006).
+func TestCredentialIndependence(t *testing.T) {
+	t.Run("each credential round-trips its own value", func(t *testing.T) {
+		keyring.MockInit()
+		withBackend(t, goKeyringBackend{})
+
+		if err := Save(ODsayAPIKey, "odsay-value"); err != nil {
+			t.Fatalf("Save(ODsayAPIKey) error = %v, want nil", err)
+		}
+		if err := Save(GeocoderAPIKey, "geocoder-value"); err != nil {
+			t.Fatalf("Save(GeocoderAPIKey) error = %v, want nil", err)
+		}
+
+		odsay, err := Load(ODsayAPIKey)
+		if err != nil || odsay != "odsay-value" {
+			t.Fatalf("Load(ODsayAPIKey) = %q, %v; want %q, nil", odsay, err, "odsay-value")
+		}
+		geocoder, err := Load(GeocoderAPIKey)
+		if err != nil || geocoder != "geocoder-value" {
+			t.Fatalf("Load(GeocoderAPIKey) = %q, %v; want %q, nil", geocoder, err, "geocoder-value")
+		}
+	})
+
+	t.Run("deleting one leaves the other intact", func(t *testing.T) {
+		keyring.MockInit()
+		withBackend(t, goKeyringBackend{})
+
+		if err := Save(ODsayAPIKey, "odsay-value"); err != nil {
+			t.Fatalf("Save(ODsayAPIKey) error = %v, want nil", err)
+		}
+		if err := Save(GeocoderAPIKey, "geocoder-value"); err != nil {
+			t.Fatalf("Save(GeocoderAPIKey) error = %v, want nil", err)
+		}
+
+		if err := Delete(GeocoderAPIKey); err != nil {
+			t.Fatalf("Delete(GeocoderAPIKey) error = %v, want nil", err)
+		}
+
+		if _, err := Load(GeocoderAPIKey); !errors.Is(err, ErrNotConfigured) {
+			t.Fatalf("Load(GeocoderAPIKey) after delete error = %v, want ErrNotConfigured", err)
+		}
+		odsay, err := Load(ODsayAPIKey)
+		if err != nil || odsay != "odsay-value" {
+			t.Fatalf("Load(ODsayAPIKey) after deleting geocoder = %q, %v; want %q, nil", odsay, err, "odsay-value")
+		}
+	})
+}
+
+// TestODsayAPIKeyValue pins the ODsayAPIKey credential's underlying string to
+// "odsay-api-key" — the username used by the original single-key
+// implementation — so existing users' stored keys keep loading without any
+// migration step (data-model.md §1).
+func TestODsayAPIKeyValue(t *testing.T) {
+	if ODsayAPIKey != "odsay-api-key" {
+		t.Fatalf("ODsayAPIKey = %q, want %q (changing this breaks existing users' stored keys)", ODsayAPIKey, "odsay-api-key")
+	}
 }
 
 // TestUnavailableBackend_OpaqueError verifies that Save, Load, and Delete
@@ -175,13 +235,13 @@ func TestUnavailableBackend_OpaqueError(t *testing.T) {
 	opaqueErr := errors.New("dbus: could not connect: no such file or directory")
 	withBackend(t, unavailableBackend{err: opaqueErr})
 
-	if err := Save("some-key"); !errors.Is(err, ErrKeychainUnavailable) || !errors.Is(err, opaqueErr) {
+	if err := Save(ODsayAPIKey, "some-key"); !errors.Is(err, ErrKeychainUnavailable) || !errors.Is(err, opaqueErr) {
 		t.Errorf("Save() error = %v, want wrapping both ErrKeychainUnavailable and the opaque cause", err)
 	}
-	if _, err := Load(); !errors.Is(err, ErrKeychainUnavailable) || !errors.Is(err, opaqueErr) {
+	if _, err := Load(ODsayAPIKey); !errors.Is(err, ErrKeychainUnavailable) || !errors.Is(err, opaqueErr) {
 		t.Errorf("Load() error = %v, want wrapping both ErrKeychainUnavailable and the opaque cause", err)
 	}
-	if err := Delete(); !errors.Is(err, ErrKeychainUnavailable) || !errors.Is(err, opaqueErr) {
+	if err := Delete(ODsayAPIKey); !errors.Is(err, ErrKeychainUnavailable) || !errors.Is(err, opaqueErr) {
 		t.Errorf("Delete() error = %v, want wrapping both ErrKeychainUnavailable and the opaque cause", err)
 	}
 }

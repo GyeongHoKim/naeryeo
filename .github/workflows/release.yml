@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+# Only one release may run at a time; never cancel an in-flight publish.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # create the git tag + GitHub Release (goreleaser)
+  id-token: write # npm OIDC trusted publishing + provenance (npm wrapper step below)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history for version calculation + changelog
+          persist-credentials: true # semantic-release pushes the tag
+
+      - name: Install mise-managed toolchain
+        uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+
+      - name: Quality gate
+        run: just check # never release a red build
+
+      - name: Install release tooling
+        run: npm ci
+
+      - name: Release
+        id: release
+        env:
+          # Default Actions token: same-repo tag + GitHub Release (goreleaser).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT / fine-grained token with write access to the tap + bucket repos;
+          # the default GITHUB_TOKEN cannot push to other repositories.
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        # semantic-release's successCmd writes `version=<v>` to $GITHUB_OUTPUT on
+        # a real release, so the npm step below can pick it up (empty otherwise).
+        run: npx semantic-release
+
+      - name: Publish npm wrapper (OIDC trusted publishing)
+        # Only after a release actually happened. Kept separate from the step
+        # above so the binary/Homebrew/Scoop release is never blocked by npm —
+        # e.g. the first run before the trusted publisher is configured.
+        # No NPM_TOKEN/NODE_AUTH_TOKEN: publishing authenticates via the OIDC
+        # id-token (permissions.id-token: write above); an empty token env var
+        # would defeat that, so none is set.
+        if: steps.release.outputs.version != ''
+        run: |
+          npm install -g npm@latest   # trusted publishing requires npm >= 11.5.1
+          cd npm
+          npm version "${{ steps.release.outputs.version }}" --no-git-tag-version --allow-same-version
+          npm publish --provenance --access public

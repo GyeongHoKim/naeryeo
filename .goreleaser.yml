@@ -55,6 +55,7 @@ homebrew_casks:
     repository:
       owner: GyeongHoKim
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: "https://github.com/GyeongHoKim/naeryeo"
     description: "CLI + MCP stdio server for Korean public-transit routing"
@@ -65,6 +66,7 @@ scoops:
     repository:
       owner: GyeongHoKim
       name: scoop-bucket
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     homepage: "https://github.com/GyeongHoKim/naeryeo"
     description: "CLI + MCP stdio server for Korean public-transit routing"
     license: MIT

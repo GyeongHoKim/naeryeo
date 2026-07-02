@@ -1,0 +1,44 @@
+{
+  "name": "@gyeonghokim/naeryeo",
+  "version": "0.0.0",
+  "description": "CLI + MCP stdio server for Korean public-transit routing (ODsay). Installs the prebuilt naeryeo binary for your platform.",
+  "type": "module",
+  "bin": {
+    "naeryeo": "bin/naeryeo.js"
+  },
+  "scripts": {
+    "postinstall": "node ./scripts/install.mjs"
+  },
+  "files": [
+    "bin/naeryeo.js",
+    "scripts/install.mjs",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "korea",
+    "transit",
+    "odsay",
+    "mcp",
+    "cli",
+    "subway",
+    "bus",
+    "대중교통",
+    "길찾기"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GyeongHoKim/naeryeo.git"
+  },
+  "homepage": "https://github.com/GyeongHoKim/naeryeo#readme",
+  "bugs": {
+    "url": "https://github.com/GyeongHoKim/naeryeo/issues"
+  },
+  "license": "MIT"
+}

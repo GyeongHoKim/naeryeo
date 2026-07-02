@@ -57,6 +57,7 @@ func toRouteToolOutput(result core.RouteResult) RouteToolOutput {
 func routeToolHandler(
 	logger *slog.Logger,
 	load func() (string, error),
+	loadGeocoder func() (string, error),
 	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
 ) mcp.ToolHandlerFor[RouteToolInput, RouteToolOutput] {
 	if logger == nil {
@@ -87,7 +88,7 @@ func routeToolHandler(
 		// no separate "not configured" branch is needed here.
 		routeResult, findErr := findRoute(ctx, apiKey, in.From, in.To)
 		if findErr != nil {
-			return nil, RouteToolOutput{}, errors.New(routeErrorMessage(findErr))
+			return nil, RouteToolOutput{}, errors.New(routeErrorMessage(findErr, geocoderConfigured(loadGeocoder)))
 		}
 		return nil, toRouteToolOutput(routeResult), nil
 	}
@@ -102,13 +103,14 @@ func buildMCPServer(
 	version string,
 	logger *slog.Logger,
 	load func() (string, error),
+	loadGeocoder func() (string, error),
 	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
 ) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "naeryeo", Version: version}, &mcp.ServerOptions{Logger: logger})
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "find_transit_route",
 		Description: "대한민국 대중교통(지하철·버스·시외버스)으로 두 지점 사이의 경로를 검색한다.",
-	}, routeToolHandler(logger, load, findRoute))
+	}, routeToolHandler(logger, load, loadGeocoder, findRoute))
 	if logger != nil {
 		logger.Info("mcp: server initialized", "name", "naeryeo", "version", version)
 	}

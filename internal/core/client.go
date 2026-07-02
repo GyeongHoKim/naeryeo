@@ -93,6 +93,8 @@ type pathCandidate struct {
 
 type subPathSegment struct {
 	TrafficType int        `json:"trafficType"`
+	Distance    float64    `json:"distance"`
+	SectionTime int        `json:"sectionTime"`
 	StartName   string     `json:"startName"`
 	EndName     string     `json:"endName"`
 	Lane        []laneInfo `json:"lane"`
@@ -191,6 +193,23 @@ type RouteStep struct {
 	Description string
 }
 
+// Coordinate is a longitude/latitude pair (EPSG:4326), as required by
+// ODsay's coordinate-based route search.
+type Coordinate struct {
+	X float64 // longitude
+	Y float64 // latitude
+}
+
+// Geocoder resolves a free-form place name (building name, address, POI)
+// into a Coordinate. It is defined here — in the consuming package — so
+// core stays decoupled from any concrete geocoding backend; implementations
+// live elsewhere (internal/geocode). A Geocoder MUST return a not-found
+// error that unwraps to its own package's not-found sentinel when the name
+// matches nothing, so resolveStation can map it to ErrPointNotFound.
+type Geocoder interface {
+	Resolve(ctx context.Context, query string) (Coordinate, error)
+}
+
 // Client searches transit routes via the ODsay API.
 type Client struct {
 	APIKey string
@@ -204,6 +223,11 @@ type Client struct {
 	// error codes, search outcomes). If nil, logging is discarded. Never
 	// logs c.APIKey.
 	Logger *slog.Logger
+	// Geocoder, when non-nil, is used as a fallback to resolve a From/To
+	// name that ODsay's station search does not recognize. When nil, no
+	// fallback occurs and an unrecognized name yields ErrPointNotFound
+	// exactly as before (spec 004 FR-012).
+	Geocoder Geocoder
 }
 
 // NewClient returns a Client configured to authenticate with apiKey.
@@ -225,10 +249,28 @@ func (c *Client) baseURL() string {
 	return defaultBaseURL
 }
 
-// resolveStation looks up name via ODsay's station search and returns the
-// first candidate's coordinates. It returns errStationNotFound if no
-// candidate matches.
+// resolveStation resolves name to coordinates. It first tries ODsay's
+// station search; if that recognizes no station AND a Geocoder is
+// configured, it falls back to the geocoder so building names and addresses
+// resolve too (spec 004). With no Geocoder configured it behaves exactly as
+// before: an unrecognized name yields errStationNotFound.
 func (c *Client) resolveStation(ctx context.Context, name string) (stationCandidate, error) {
+	station, err := c.searchStationByName(ctx, name)
+	if !errors.Is(err, errStationNotFound) {
+		// Success, or a non-not-found error (auth/unavailable/rejected) that
+		// the geocoder cannot remedy — return either as-is.
+		return station, err
+	}
+	if c.Geocoder == nil {
+		return stationCandidate{}, errStationNotFound
+	}
+	return c.geocodeFallback(ctx, name)
+}
+
+// searchStationByName looks up name via ODsay's station search and returns
+// the first candidate's coordinates. It returns errStationNotFound if no
+// candidate matches.
+func (c *Client) searchStationByName(ctx context.Context, name string) (stationCandidate, error) {
 	u := fmt.Sprintf("%s/searchStation?apiKey=%s&stationName=%s",
 		c.baseURL(), url.QueryEscape(c.APIKey), url.QueryEscape(name))
 
@@ -239,6 +281,15 @@ func (c *Client) resolveStation(ctx context.Context, name string) (stationCandid
 	if err := c.classifyODsayError(resp.Error, name, name); err != nil {
 		if errors.Is(err, errNoTravelNeeded) {
 			// -98 is meaningless for a single-point lookup; treat as not found.
+			return stationCandidate{}, errStationNotFound
+		}
+		var pointErr *ErrPointNotFound
+		if errors.As(err, &pointErr) {
+			// ODsay codes 3/4/5 (from/to/both not found) all mean this single
+			// name matched no stop. Normalize to errStationNotFound so the
+			// geocoder fallback engages; with no geocoder, resolveStation still
+			// yields errStationNotFound and FindRoute reports ErrPointNotFound
+			// with the correct side (spec 004 research §3 risk).
 			return stationCandidate{}, errStationNotFound
 		}
 		return stationCandidate{}, err
@@ -252,6 +303,25 @@ func (c *Client) resolveStation(ctx context.Context, name string) (stationCandid
 		return stationCandidate{}, errStationNotFound
 	}
 	return resp.Result.Station[0], nil
+}
+
+// geocodeFallback resolves name via c.Geocoder and adapts the result to a
+// stationCandidate (reusing the station path's coordinate type, so the rest
+// of FindRoute is unchanged). A geocoder "not found" is folded back into
+// errStationNotFound so FindRoute reports ErrPointNotFound for the right
+// side; auth/unavailable errors propagate as their core sentinels.
+func (c *Client) geocodeFallback(ctx context.Context, name string) (stationCandidate, error) {
+	coord, err := c.Geocoder.Resolve(ctx, name)
+	switch {
+	case err == nil:
+		c.logger().Debug("core: geocoder resolved name", "name", name)
+		return stationCandidate{X: flexibleFloat(coord.X), Y: flexibleFloat(coord.Y)}, nil
+	case errors.Is(err, ErrGeocoderNotFound):
+		return stationCandidate{}, errStationNotFound
+	default:
+		// ErrGeocoderAuthFailed / ErrGeocoderUnavailable — surface as-is.
+		return stationCandidate{}, err
+	}
 }
 
 // FindRoute searches for the representative transit route between from and
@@ -313,10 +383,23 @@ func toRouteResult(p pathCandidate) RouteResult {
 	}
 	return RouteResult{
 		TotalTime:     p.Info.TotalTime,
-		TransferCount: p.Info.SubwayTransitCount + p.Info.BusTransitCount,
+		TransferCount: transferCount(p.Info.SubwayTransitCount, p.Info.BusTransitCount),
 		Fare:          p.Info.Payment,
 		Steps:         steps,
 	}
+}
+
+// transferCount converts ODsay's per-mode boarding counts into a transfer
+// count. subwayTransitCount/busTransitCount are the number of subway/bus
+// *boardings*, so the number of transfers is one less than the total number
+// of boardings (a single ride is zero transfers). Zero boardings (e.g. a
+// walk-only path) yields zero, never a negative count.
+func transferCount(subwayBoardings, busBoardings int) int {
+	boardings := subwayBoardings + busBoardings
+	if boardings <= 1 {
+		return 0
+	}
+	return boardings - 1
 }
 
 func describeSubPath(sp subPathSegment) string {
@@ -324,13 +407,72 @@ func describeSubPath(sp subPathSegment) string {
 	if len(sp.Lane) > 0 {
 		laneName = sp.Lane[0].Name
 	}
+	startName := strings.TrimSpace(sp.StartName)
+	endName := strings.TrimSpace(sp.EndName)
 
 	switch sp.TrafficType {
 	case 1: // subway
-		return fmt.Sprintf("%s에서 %s 승차 → %s에서 하차", sp.StartName, laneName, sp.EndName)
+		return fmt.Sprintf("%s에서 %s 승차 → %s에서 하차", startName, laneName, endName)
 	case 2: // bus
-		return fmt.Sprintf("%s에서 %s 버스 승차 → %s에서 하차", sp.StartName, laneName, sp.EndName)
+		return fmt.Sprintf("%s에서 %s 버스 승차 → %s에서 하차", startName, laneName, endName)
+	case 3: // walk
+		return describeWalkSubPath(sp, startName, endName)
 	default:
-		return fmt.Sprintf("%s에서 %s까지 이동", sp.StartName, sp.EndName)
+		return describeGenericSubPath(sp, startName, endName)
+	}
+}
+
+func describeWalkSubPath(sp subPathSegment, startName, endName string) string {
+	switch {
+	case startName != "" && endName != "":
+		return fmt.Sprintf("%s에서 %s까지 도보 이동%s", startName, endName, segmentDetail(sp))
+	case startName != "":
+		return fmt.Sprintf("%s에서 도보 이동%s", startName, segmentDetail(sp))
+	case endName != "":
+		return fmt.Sprintf("%s까지 도보 이동%s", endName, segmentDetail(sp))
+	default:
+		return "도보" + movementSummary(sp)
+	}
+}
+
+func describeGenericSubPath(sp subPathSegment, startName, endName string) string {
+	switch {
+	case startName != "" && endName != "":
+		return fmt.Sprintf("%s에서 %s까지 이동%s", startName, endName, segmentDetail(sp))
+	case startName != "":
+		return fmt.Sprintf("%s에서 이동%s", startName, segmentDetail(sp))
+	case endName != "":
+		return fmt.Sprintf("%s까지 이동%s", endName, segmentDetail(sp))
+	default:
+		return "이동" + movementSummary(sp)
+	}
+}
+
+func segmentDetail(sp subPathSegment) string {
+	distance := int(sp.Distance + 0.5)
+	details := make([]string, 0, 2)
+	if sp.SectionTime > 0 {
+		details = append(details, fmt.Sprintf("%d분", sp.SectionTime))
+	}
+	if distance > 0 {
+		details = append(details, fmt.Sprintf("%dm", distance))
+	}
+	if len(details) == 0 {
+		return ""
+	}
+	return " (" + strings.Join(details, ", ") + ")"
+}
+
+func movementSummary(sp subPathSegment) string {
+	distance := int(sp.Distance + 0.5)
+	switch {
+	case sp.SectionTime > 0 && distance > 0:
+		return fmt.Sprintf(" %d분 이동 (%dm)", sp.SectionTime, distance)
+	case sp.SectionTime > 0:
+		return fmt.Sprintf(" %d분 이동", sp.SectionTime)
+	case distance > 0:
+		return fmt.Sprintf(" %dm 이동", distance)
+	default:
+		return " 이동"
 	}
 }

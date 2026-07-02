@@ -46,7 +46,7 @@ func TestSave_NeverLogsTheAPIKey(t *testing.T) {
 	SetLogger(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	withBackend(t, fakeSetOnlyBackend{})
 
-	if err := Save(secret); err != nil {
+	if err := Save(ODsayAPIKey, secret); err != nil {
 		t.Fatalf("Save() error = %v, want nil", err)
 	}
 

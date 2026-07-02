@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 질문 / 사용법 논의
+    url: https://github.com/GyeongHoKim/naeryeo/discussions
+    about: 버그·기능 제안이 아닌 사용법 질문이나 아이디어 논의는 Discussions를 이용해 주세요.
+  - name: 문서 (README)
+    url: https://github.com/GyeongHoKim/naeryeo#readme
+    about: 설치·설정·사용법은 README에서 먼저 확인해 주세요.

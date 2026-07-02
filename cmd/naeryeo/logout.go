@@ -2,21 +2,36 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 
 	"github.com/GyeongHoKim/naeryeo/internal/config"
 )
 
-// runLogout removes the stored ODsay API key via del. It calls load first
-// purely to choose the right user-facing message (FR-009: "nothing to
-// delete" must read differently from "deleted"), since Delete itself is
-// intentionally idempotent and reports no error either way.
-func runLogout(_ []string, stdout, stderr io.Writer, load func() (string, error), del func() error) int {
-	_, loadErr := load()
+// runLogout removes a stored API key via del. Without flags it targets the
+// ODsay route-search key; with --geocoder it targets the place-search
+// (Kakao) key. It calls load first purely to choose the right user-facing
+// message (FR-009: "nothing to delete" must read differently from
+// "deleted"), since Delete itself is intentionally idempotent and reports no
+// error either way.
+func runLogout(args []string, stdout, stderr io.Writer, load func(config.Credential) (string, error), del func(config.Credential) error) int {
+	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	geocoder := fs.Bool("geocoder", false, "장소 검색(Kakao) API 키를 삭제한다")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	cred := config.ODsayAPIKey
+	if *geocoder {
+		cred = config.GeocoderAPIKey
+	}
+
+	_, loadErr := load(cred)
 	hadKey := !errors.Is(loadErr, config.ErrNotConfigured)
 
-	if err := del(); err != nil {
+	if err := del(cred); err != nil {
 		if errors.Is(err, config.ErrKeychainUnavailable) {
 			if _, werr := fmt.Fprintf(stderr, "naeryeo logout: OS 키체인을 사용할 수 없습니다: %v\n", err); werr != nil {
 				return 1
