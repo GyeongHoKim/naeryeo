@@ -67,6 +67,7 @@ scoops:
       owner: GyeongHoKim
       name: scoop-bucket
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: bucket
     homepage: "https://github.com/GyeongHoKim/naeryeo"
     description: "CLI + MCP stdio server for Korean public-transit routing"
     license: MIT
