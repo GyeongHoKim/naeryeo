@@ -1,0 +1,39 @@
+{
+  "metaData": {
+    "plan": {
+      "itineraries": [
+        {
+          "fare": { "regular": { "totalFare": 1650 } },
+          "totalTime": 2528,
+          "transferCount": 0,
+          "totalDistance": 22179,
+          "legs": [
+            {
+              "mode": "WALK",
+              "sectionTime": 59,
+              "distance": 49,
+              "start": { "name": "출발지", "lon": 127.0276, "lat": 37.4979 },
+              "end": { "name": "강남", "lon": 127.02774444444445, "lat": 37.497991666666664 }
+            },
+            {
+              "mode": "SUBWAY",
+              "sectionTime": 2356,
+              "route": "수도권2호선",
+              "routeId": "110021006",
+              "distance": 22090,
+              "start": { "name": "강남", "lon": 127.02774444444445, "lat": 37.497991666666664 },
+              "end": { "name": "홍대입구", "lon": 126.92349722222222, "lat": 37.55663055555556 }
+            },
+            {
+              "mode": "WALK",
+              "sectionTime": 113,
+              "distance": 116,
+              "start": { "name": "홍대입구", "lon": 126.92349722222222, "lat": 37.55663055555556 },
+              "end": { "name": "도착지", "lon": 126.9228, "lat": 37.5563 }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 	"github.com/GyeongHoKim/naeryeo/internal/motis"
+	"github.com/GyeongHoKim/naeryeo/internal/tmap"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -102,10 +103,13 @@ func httpRouteToolHandler(logger *slog.Logger, finder cloudRouteFinder) mcp.Tool
 	}
 }
 
-// cloudRouteErrorMessage classifies a MOTIS-track error into one of the
-// four user-facing Korean messages fixed by contracts/mcp-tool.md. It must
+// cloudRouteErrorMessage classifies a cloud-track error into one of the
+// user-facing Korean messages fixed by contracts/mcp-tool.md. It must
 // never leak internals (backend URL, status codes, Go error chains) — the
-// full error is logged by the handler's deferred log line instead.
+// full error is logged by the handler's deferred log line instead. The
+// classification spans all three pluggable providers (motis/tmap/odsay);
+// each provider's own "no route" sentinel is distinct (package-local,
+// like motis.ErrNoRoute vs core.ErrNoRoute) so every one is checked.
 func cloudRouteErrorMessage(err error) string {
 	var pointErr *core.ErrPointNotFound
 	switch {
@@ -115,11 +119,13 @@ func cloudRouteErrorMessage(err error) string {
 			side = "도착지"
 		}
 		return fmt.Sprintf("%s %q을(를) 찾지 못했어요. 역·정류장 이름으로 다시 시도해 주세요.", side, pointErr.Name)
-	case errors.Is(err, motis.ErrNoRoute):
+	case errors.Is(err, motis.ErrNoRoute), errors.Is(err, tmap.ErrNoRoute), errors.Is(err, core.ErrNoRoute):
 		return "해당 구간의 대중교통 경로를 찾지 못했어요."
+	case errors.Is(err, tmap.ErrQuotaExceeded):
+		return "이 백엔드의 무료 API 사용량을 초과했어요. 잠시 후 다시 시도해 주세요."
 	default:
-		// motis.ErrUnavailable, context.DeadlineExceeded, and anything
-		// unexpected all read as a transient backend problem to the user.
+		// *Unavailable, context.DeadlineExceeded, and anything unexpected
+		// all read as a transient backend problem to the user.
 		return "경로 서버가 일시적으로 응답하지 않아요. 잠시 후 다시 시도해 주세요."
 	}
 }
@@ -203,10 +209,51 @@ func motisURLFromEnv(getenv func(string) string) (string, error) {
 	return u, nil
 }
 
+// cloudRouteFinderFromEnv builds the cloudRouteFinder for the routing
+// backend selected by NAERYEO_PROVIDER (unset defaults to "motis", the
+// original deployment). Each provider fails fast if its own required env
+// var is missing (FR-004) rather than serving a half-up server that
+// cannot route.
+func cloudRouteFinderFromEnv(getenv func(string) string, logger *slog.Logger) (cloudRouteFinder, error) {
+	provider := strings.TrimSpace(getenv("NAERYEO_PROVIDER"))
+	if provider == "" {
+		provider = "motis"
+	}
+
+	switch provider {
+	case "motis":
+		motisURL, err := motisURLFromEnv(getenv)
+		if err != nil {
+			return nil, err
+		}
+		client := motis.NewClient(motisURL)
+		client.Logger = logger
+		return client.FindRoute, nil
+	case "tmap":
+		appKey := strings.TrimSpace(getenv("NAERYEO_TMAP_APP_KEY"))
+		if appKey == "" {
+			return nil, errors.New("NAERYEO_TMAP_APP_KEY 환경변수가 필요합니다 (TMAP 대중교통·POI 상품의 앱키)")
+		}
+		client := tmap.NewClient(appKey)
+		client.Logger = logger
+		return client.FindRoute, nil
+	case "odsay":
+		apiKey := strings.TrimSpace(getenv("NAERYEO_ODSAY_API_KEY"))
+		if apiKey == "" {
+			return nil, errors.New("NAERYEO_ODSAY_API_KEY 환경변수가 필요합니다 (클라우드 전용 ODsay API 키)")
+		}
+		client := core.NewClient(apiKey)
+		client.Logger = logger
+		return client.FindRoute, nil
+	default:
+		return nil, fmt.Errorf("NAERYEO_PROVIDER=%q 는 지원하지 않아요 (motis | tmap | odsay)", provider)
+	}
+}
+
 // runMCPHTTPCommand is the --http twin of the stdio path in run(): it
-// builds the MOTIS-backed server and serves until SIGINT/SIGTERM.
+// builds the configured provider's server and serves until SIGINT/SIGTERM.
 func runMCPHTTPCommand(addrFlag string, stderr io.Writer, logger *slog.Logger) int {
-	motisURL, err := motisURLFromEnv(os.Getenv)
+	finder, err := cloudRouteFinderFromEnv(os.Getenv, logger)
 	if err != nil {
 		if _, writeErr := fmt.Fprintln(stderr, "naeryeo mcp --http: "+err.Error()); writeErr != nil {
 			return 1
@@ -214,9 +261,7 @@ func runMCPHTTPCommand(addrFlag string, stderr io.Writer, logger *slog.Logger) i
 		return 1
 	}
 
-	client := motis.NewClient(motisURL)
-	client.Logger = logger
-	server := buildHTTPMCPServer(version, logger, client.FindRoute)
+	server := buildHTTPMCPServer(version, logger, finder)
 	addr := resolveHTTPAddr(addrFlag, os.Getenv("PORT"))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 	"github.com/GyeongHoKim/naeryeo/internal/motis"
+	"github.com/GyeongHoKim/naeryeo/internal/tmap"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -111,9 +112,24 @@ func TestCloudRouteErrorMessages(t *testing.T) {
 			wantMsg: `도착지 "없는곳"을(를) 찾지 못했어요`,
 		},
 		{
-			name:    "no route",
+			name:    "no route (motis)",
 			err:     fmt.Errorf("plan: %w", motis.ErrNoRoute),
 			wantMsg: "해당 구간의 대중교통 경로를 찾지 못했어요.",
+		},
+		{
+			name:    "no route (tmap)",
+			err:     fmt.Errorf("plan: %w", tmap.ErrNoRoute),
+			wantMsg: "해당 구간의 대중교통 경로를 찾지 못했어요.",
+		},
+		{
+			name:    "no route (odsay/core)",
+			err:     fmt.Errorf("plan: %w", core.ErrNoRoute),
+			wantMsg: "해당 구간의 대중교통 경로를 찾지 못했어요.",
+		},
+		{
+			name:    "tmap quota exceeded",
+			err:     fmt.Errorf("geocode: %w", tmap.ErrQuotaExceeded),
+			wantMsg: "무료 API 사용량을 초과했어요",
 		},
 		{
 			name:    "backend unavailable",
@@ -378,6 +394,61 @@ func TestMotisURLFromEnv(t *testing.T) {
 		}
 		if got != "https://motis.example.com" {
 			t.Errorf("url = %q", got)
+		}
+	})
+}
+
+func TestCloudRouteFinderFromEnv(t *testing.T) {
+	env := func(vars map[string]string) func(string) string {
+		return func(key string) string { return vars[key] }
+	}
+
+	t.Run("unset provider defaults to motis", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_MOTIS_URL": "https://motis.example.com"}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	t.Run("motis without NAERYEO_MOTIS_URL fails fast", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "motis"}), nil)
+		if err == nil || !strings.Contains(err.Error(), "NAERYEO_MOTIS_URL") {
+			t.Fatalf("err = %v, want mention of NAERYEO_MOTIS_URL", err)
+		}
+	})
+	t.Run("tmap without NAERYEO_TMAP_APP_KEY fails fast", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "tmap"}), nil)
+		if err == nil || !strings.Contains(err.Error(), "NAERYEO_TMAP_APP_KEY") {
+			t.Fatalf("err = %v, want mention of NAERYEO_TMAP_APP_KEY", err)
+		}
+	})
+	t.Run("tmap with app key succeeds", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{
+			"NAERYEO_PROVIDER":     "tmap",
+			"NAERYEO_TMAP_APP_KEY": "key",
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	t.Run("odsay without NAERYEO_ODSAY_API_KEY fails fast", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "odsay"}), nil)
+		if err == nil || !strings.Contains(err.Error(), "NAERYEO_ODSAY_API_KEY") {
+			t.Fatalf("err = %v, want mention of NAERYEO_ODSAY_API_KEY", err)
+		}
+	})
+	t.Run("odsay with api key succeeds", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{
+			"NAERYEO_PROVIDER":      "odsay",
+			"NAERYEO_ODSAY_API_KEY": "key",
+		}), nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	t.Run("unknown provider is a clear error", func(t *testing.T) {
+		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "unknown"}), nil)
+		if err == nil || !strings.Contains(err.Error(), `NAERYEO_PROVIDER="unknown"`) {
+			t.Fatalf("err = %v, want mention of the unsupported provider", err)
 		}
 	})
 }

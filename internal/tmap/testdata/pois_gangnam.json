@@ -1,0 +1,38 @@
+{
+  "searchPoiInfo": {
+    "totalCount": "1769",
+    "count": "5",
+    "page": "1",
+    "pois": {
+      "poi": [
+        {
+          "name": "강남역[2호선]",
+          "frontLat": "37.49804637",
+          "frontLon": "127.02796290",
+          "noorLat": "37.49804637",
+          "noorLon": "127.02796290",
+          "dataKind": "1",
+          "lowerBizName": "지하철역"
+        },
+        {
+          "name": "강남역 1번출구",
+          "frontLat": "37.49812971",
+          "frontLon": "127.02868505",
+          "noorLat": "37.49804639",
+          "noorLon": "127.02871283",
+          "dataKind": "2",
+          "lowerBizName": "지하철출구번호"
+        },
+        {
+          "name": "강남역[신분당선]",
+          "frontLat": "37.49646323",
+          "frontLon": "127.02832402",
+          "noorLat": "37.49646323",
+          "noorLon": "127.02832402",
+          "dataKind": "1",
+          "lowerBizName": "지하철역"
+        }
+      ]
+    }
+  }
+}
