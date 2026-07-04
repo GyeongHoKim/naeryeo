@@ -35,6 +35,7 @@ PlayMCP 개발가이드(2026.06.12)가 심사 반려 기준이므로, 이 계약
 _데이터: KTDB·OSM 기반 시간표 — 실시간 지연 미반영_
 ```
 
+- 각주의 데이터 출처는 실제로 응답한 backend에 따라 달라진다 (MOTIS는 `KTDB·OSM`, TMAP은 `TMAP 대중교통 API`, ODsay는 `ODsay`) — 위 예시는 MOTIS 기준. 고정 문자열이 아니므로 provider 전환 시 그대로 따라간다
 - 요금은 값이 있을 때만 `· 요금 1,500원` 추가 (KTDB 요금 부재 시 생략)
 - 구조화 JSON(structuredContent)은 넣지 않는다 — "원본 API 응답 지양·최소 크기"
 - 광고성 문구 금지

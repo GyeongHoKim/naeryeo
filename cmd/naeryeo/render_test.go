@@ -21,15 +21,17 @@ func TestRenderRouteMarkdown(t *testing.T) {
 	tests := []struct {
 		name         string
 		from, to     string
+		dataSource   string
 		result       core.RouteResult
 		wantContains []string
 		wantAbsent   []string
 	}{
 		{
-			name:   "fare omitted when zero (KTDB has no fares)",
-			from:   "강남역",
-			to:     "홍대입구역",
-			result: route,
+			name:       "fare omitted when zero (KTDB has no fares)",
+			from:       "강남역",
+			to:         "홍대입구역",
+			dataSource: "KTDB·OSM",
+			result:     route,
 			wantContains: []string{
 				"**강남역 → 홍대입구역** · 약 39분 · 환승 1회",
 				"1. 신논현까지 도보 13분",
@@ -40,9 +42,21 @@ func TestRenderRouteMarkdown(t *testing.T) {
 			wantAbsent: []string{"요금"},
 		},
 		{
-			name: "fare included when known, with thousands separator",
-			from: "강남역",
-			to:   "홍대입구역",
+			name:       "footnote names whichever backend actually answered",
+			from:       "강남역",
+			to:         "홍대입구역",
+			dataSource: "TMAP 대중교통 API",
+			result:     route,
+			wantContains: []string{
+				"_데이터: TMAP 대중교통 API 기반 시간표 — 실시간 지연 미반영_",
+			},
+			wantAbsent: []string{"KTDB"},
+		},
+		{
+			name:       "fare included when known, with thousands separator",
+			from:       "강남역",
+			to:         "홍대입구역",
+			dataSource: "KTDB·OSM",
 			result: core.RouteResult{
 				TotalTime:     42,
 				TransferCount: 1,
@@ -52,10 +66,11 @@ func TestRenderRouteMarkdown(t *testing.T) {
 			wantContains: []string{"· 요금 1,500원"},
 		},
 		{
-			name:   "no travel needed",
-			from:   "강남역",
-			to:     "강남역",
-			result: core.RouteResult{NoTravelNeeded: true},
+			name:       "no travel needed",
+			from:       "강남역",
+			to:         "강남역",
+			dataSource: "KTDB·OSM",
+			result:     core.RouteResult{NoTravelNeeded: true},
 			wantContains: []string{
 				"**강남역 → 강남역**",
 				"이동이 필요하지 않습니다",
@@ -66,7 +81,7 @@ func TestRenderRouteMarkdown(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := renderRouteMarkdown(tt.from, tt.to, tt.result)
+			got := renderRouteMarkdown(tt.from, tt.to, tt.dataSource, tt.result)
 			for _, want := range tt.wantContains {
 				if !strings.Contains(got, want) {
 					t.Errorf("markdown missing %q:\n%s", want, got)

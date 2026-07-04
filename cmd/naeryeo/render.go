@@ -12,9 +12,12 @@ import (
 // text the cloud (PlayMCP) tool returns. Format is fixed by
 // specs/005-playmcp-cloud-server/contracts/mcp-tool.md: bold header with
 // duration/transfers (+fare only when known), a numbered step list, and a
-// data-source footnote. Raw backend JSON must never appear here — the
-// PlayMCP dev guide requires minimal, human-readable tool results.
-func renderRouteMarkdown(from, to string, r core.RouteResult) string {
+// data-source footnote. dataSource names whichever backend actually served
+// the request (e.g. "TMAP 대중교통 API", "MOTIS(KTDB·OSM)") — the footnote
+// must never claim a fixed provider regardless of which one answered. Raw
+// backend JSON must never appear here — the PlayMCP dev guide requires
+// minimal, human-readable tool results.
+func renderRouteMarkdown(from, to, dataSource string, r core.RouteResult) string {
 	if r.NoTravelNeeded {
 		return fmt.Sprintf("**%s → %s**\n\n출발지와 도착지가 사실상 같은 위치예요. 대중교통 이동이 필요하지 않습니다.", from, to)
 	}
@@ -30,7 +33,7 @@ func renderRouteMarkdown(from, to string, r core.RouteResult) string {
 		fmt.Fprintf(&b, "%d. %s\n", i+1, step.Description)
 	}
 
-	b.WriteString("\n_데이터: KTDB·OSM 기반 시간표 — 실시간 지연 미반영_")
+	fmt.Fprintf(&b, "\n_데이터: %s 기반 시간표 — 실시간 지연 미반영_", dataSource)
 	return b.String()
 }
 

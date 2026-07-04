@@ -61,7 +61,7 @@ type cloudRouteFinder func(ctx context.Context, from, to string) (core.RouteResu
 // httpRouteToolHandler builds the cloud find_transit_route handler. The
 // result is refined markdown text only (no structured JSON), per the
 // PlayMCP dev guide's "minimal, human-readable result" rule.
-func httpRouteToolHandler(logger *slog.Logger, finder cloudRouteFinder) mcp.ToolHandlerFor[cloudRouteInput, any] {
+func httpRouteToolHandler(logger *slog.Logger, finder cloudRouteFinder, dataSource string) mcp.ToolHandlerFor[cloudRouteInput, any] {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -98,7 +98,7 @@ func httpRouteToolHandler(logger *slog.Logger, finder cloudRouteFinder) mcp.Tool
 			return nil, nil, err
 		}
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{&mcp.TextContent{Text: renderRouteMarkdown(from, to, route)}},
+			Content: []mcp.Content{&mcp.TextContent{Text: renderRouteMarkdown(from, to, dataSource, route)}},
 		}, nil, nil
 	}
 }
@@ -133,7 +133,7 @@ func cloudRouteErrorMessage(err error) string {
 // buildHTTPMCPServer assembles the cloud-track MCP server with the
 // PlayMCP-compliant tool definition: all five behavior-hint annotations
 // set explicitly (contracts/mcp-tool.md).
-func buildHTTPMCPServer(version string, logger *slog.Logger, finder cloudRouteFinder) *mcp.Server {
+func buildHTTPMCPServer(version string, logger *slog.Logger, finder cloudRouteFinder, dataSource string) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "naeryeo", Version: version}, &mcp.ServerOptions{Logger: logger})
 
 	notDestructive := false
@@ -148,7 +148,7 @@ func buildHTTPMCPServer(version string, logger *slog.Logger, finder cloudRouteFi
 			IdempotentHint:  true,
 			OpenWorldHint:   &openWorld,
 		},
-	}, httpRouteToolHandler(logger, finder))
+	}, httpRouteToolHandler(logger, finder, dataSource))
 
 	if logger != nil {
 		logger.Info("mcp-http: server initialized", "name", "naeryeo", "version", version)
@@ -210,50 +210,56 @@ func motisURLFromEnv(getenv func(string) string) (string, error) {
 }
 
 // cloudRouteFinderFromEnv builds the cloudRouteFinder for the routing
-// backend selected by NAERYEO_PROVIDER (unset defaults to "motis", the
-// original deployment). Each provider fails fast if its own required env
-// var is missing (FR-004) rather than serving a half-up server that
-// cannot route.
-func cloudRouteFinderFromEnv(getenv func(string) string, logger *slog.Logger) (cloudRouteFinder, error) {
+// backend selected by NAERYEO_PROVIDER (unset defaults to "tmap": MOTIS via
+// the public transitous.org reference instance measured over its real
+// 3-hop sequential latency and missed the 2.5s handler budget, so TMAP —
+// backed by SK Open API's own low-latency infra — ships as the default
+// until a same-region self-hosted MOTIS replaces it). Each provider fails
+// fast if its own required env var is missing (FR-004) rather than serving
+// a half-up server that cannot route. The returned string names the
+// backend for renderRouteMarkdown's data-source footnote — it must never
+// be a fixed literal, since the footnote's claimed provenance has to match
+// whichever provider actually answered.
+func cloudRouteFinderFromEnv(getenv func(string) string, logger *slog.Logger) (cloudRouteFinder, string, error) {
 	provider := strings.TrimSpace(getenv("NAERYEO_PROVIDER"))
 	if provider == "" {
-		provider = "motis"
+		provider = "tmap"
 	}
 
 	switch provider {
 	case "motis":
 		motisURL, err := motisURLFromEnv(getenv)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		client := motis.NewClient(motisURL)
 		client.Logger = logger
-		return client.FindRoute, nil
+		return client.FindRoute, "MOTIS(KTDB·OSM)", nil
 	case "tmap":
 		appKey := strings.TrimSpace(getenv("NAERYEO_TMAP_APP_KEY"))
 		if appKey == "" {
-			return nil, errors.New("NAERYEO_TMAP_APP_KEY 환경변수가 필요합니다 (TMAP 대중교통·POI 상품의 앱키)")
+			return nil, "", errors.New("NAERYEO_TMAP_APP_KEY 환경변수가 필요합니다 (TMAP 대중교통·POI 상품의 앱키)")
 		}
 		client := tmap.NewClient(appKey)
 		client.Logger = logger
-		return client.FindRoute, nil
+		return client.FindRoute, "TMAP 대중교통 API", nil
 	case "odsay":
 		apiKey := strings.TrimSpace(getenv("NAERYEO_ODSAY_API_KEY"))
 		if apiKey == "" {
-			return nil, errors.New("NAERYEO_ODSAY_API_KEY 환경변수가 필요합니다 (클라우드 전용 ODsay API 키)")
+			return nil, "", errors.New("NAERYEO_ODSAY_API_KEY 환경변수가 필요합니다 (클라우드 전용 ODsay API 키)")
 		}
 		client := core.NewClient(apiKey)
 		client.Logger = logger
-		return client.FindRoute, nil
+		return client.FindRoute, "ODsay", nil
 	default:
-		return nil, fmt.Errorf("NAERYEO_PROVIDER=%q 는 지원하지 않아요 (motis | tmap | odsay)", provider)
+		return nil, "", fmt.Errorf("NAERYEO_PROVIDER=%q 는 지원하지 않아요 (motis | tmap | odsay)", provider)
 	}
 }
 
 // runMCPHTTPCommand is the --http twin of the stdio path in run(): it
 // builds the configured provider's server and serves until SIGINT/SIGTERM.
 func runMCPHTTPCommand(addrFlag string, stderr io.Writer, logger *slog.Logger) int {
-	finder, err := cloudRouteFinderFromEnv(os.Getenv, logger)
+	finder, dataSource, err := cloudRouteFinderFromEnv(os.Getenv, logger)
 	if err != nil {
 		if _, writeErr := fmt.Fprintln(stderr, "naeryeo mcp --http: "+err.Error()); writeErr != nil {
 			return 1
@@ -261,7 +267,7 @@ func runMCPHTTPCommand(addrFlag string, stderr io.Writer, logger *slog.Logger) i
 		return 1
 	}
 
-	server := buildHTTPMCPServer(version, logger, finder)
+	server := buildHTTPMCPServer(version, logger, finder, dataSource)
 	addr := resolveHTTPAddr(addrFlag, os.Getenv("PORT"))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

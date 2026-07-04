@@ -38,7 +38,7 @@ func okFinder(context.Context, string, string) (core.RouteResult, error) {
 // callTool invokes the handler directly (bypassing HTTP) with a fake finder.
 func callTool(t *testing.T, finder cloudRouteFinder, from, to string) (*mcp.CallToolResult, error) {
 	t.Helper()
-	handler := httpRouteToolHandler(nil, finder)
+	handler := httpRouteToolHandler(nil, finder, "test-source")
 	result, _, err := handler(context.Background(), nil, cloudRouteInput{From: from, To: to})
 	return result, err
 }
@@ -219,7 +219,7 @@ func TestCloudToolMetadataCompliance(t *testing.T) {
 // TestStatelessHTTPRoundTrip exercises the full Streamable HTTP path with
 // raw JSON-RPC POSTs (no session header — stateless per the dev guide).
 func TestStatelessHTTPRoundTrip(t *testing.T) {
-	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, okFinder), nil))
+	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, okFinder, "test-source"), nil))
 	t.Cleanup(srv.Close)
 
 	var resp jsonRPCResponse
@@ -256,7 +256,7 @@ func TestBackendFailureIsolation(t *testing.T) {
 		<-ctx.Done()
 		return core.RouteResult{}, ctx.Err()
 	}
-	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, blockingFinder), nil))
+	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, blockingFinder, "test-source"), nil))
 	t.Cleanup(srv.Close)
 
 	start := time.Now()
@@ -293,7 +293,7 @@ func TestBackendFailureIsolation(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, okFinder), nil))
+	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, okFinder, "test-source"), nil))
 	t.Cleanup(srv.Close)
 
 	resp, err := http.Get(srv.URL + "/healthz")
@@ -319,7 +319,7 @@ func TestToolCallLogging(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
-	handler := httpRouteToolHandler(logger, okFinder)
+	handler := httpRouteToolHandler(logger, okFinder, "test-source")
 	if _, _, err := handler(context.Background(), nil, cloudRouteInput{From: "강남역", To: "홍대입구역"}); err != nil {
 		t.Fatalf("handler error: %v", err)
 	}
@@ -403,50 +403,59 @@ func TestCloudRouteFinderFromEnv(t *testing.T) {
 		return func(key string) string { return vars[key] }
 	}
 
-	t.Run("unset provider defaults to motis", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_MOTIS_URL": "https://motis.example.com"}), nil)
+	t.Run("unset provider defaults to tmap", func(t *testing.T) {
+		_, dataSource, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_TMAP_APP_KEY": "key"}), nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if dataSource != "TMAP 대중교통 API" {
+			t.Errorf("dataSource = %q, want TMAP label", dataSource)
+		}
 	})
 	t.Run("motis without NAERYEO_MOTIS_URL fails fast", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "motis"}), nil)
+		_, _, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "motis"}), nil)
 		if err == nil || !strings.Contains(err.Error(), "NAERYEO_MOTIS_URL") {
 			t.Fatalf("err = %v, want mention of NAERYEO_MOTIS_URL", err)
 		}
 	})
 	t.Run("tmap without NAERYEO_TMAP_APP_KEY fails fast", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "tmap"}), nil)
+		_, _, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "tmap"}), nil)
 		if err == nil || !strings.Contains(err.Error(), "NAERYEO_TMAP_APP_KEY") {
 			t.Fatalf("err = %v, want mention of NAERYEO_TMAP_APP_KEY", err)
 		}
 	})
 	t.Run("tmap with app key succeeds", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{
+		_, dataSource, err := cloudRouteFinderFromEnv(env(map[string]string{
 			"NAERYEO_PROVIDER":     "tmap",
 			"NAERYEO_TMAP_APP_KEY": "key",
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if dataSource != "TMAP 대중교통 API" {
+			t.Errorf("dataSource = %q, want TMAP label", dataSource)
+		}
 	})
 	t.Run("odsay without NAERYEO_ODSAY_API_KEY fails fast", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "odsay"}), nil)
+		_, _, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "odsay"}), nil)
 		if err == nil || !strings.Contains(err.Error(), "NAERYEO_ODSAY_API_KEY") {
 			t.Fatalf("err = %v, want mention of NAERYEO_ODSAY_API_KEY", err)
 		}
 	})
 	t.Run("odsay with api key succeeds", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{
+		_, dataSource, err := cloudRouteFinderFromEnv(env(map[string]string{
 			"NAERYEO_PROVIDER":      "odsay",
 			"NAERYEO_ODSAY_API_KEY": "key",
 		}), nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if dataSource != "ODsay" {
+			t.Errorf("dataSource = %q, want ODsay label", dataSource)
+		}
 	})
 	t.Run("unknown provider is a clear error", func(t *testing.T) {
-		_, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "unknown"}), nil)
+		_, _, err := cloudRouteFinderFromEnv(env(map[string]string{"NAERYEO_PROVIDER": "unknown"}), nil)
 		if err == nil || !strings.Contains(err.Error(), `NAERYEO_PROVIDER="unknown"`) {
 			t.Fatalf("err = %v, want mention of the unsupported provider", err)
 		}
@@ -454,28 +463,30 @@ func TestCloudRouteFinderFromEnv(t *testing.T) {
 }
 
 func TestRunMCPHTTPCommandFailsFastWithoutEnv(t *testing.T) {
-	t.Setenv("NAERYEO_MOTIS_URL", "")
+	t.Setenv("NAERYEO_PROVIDER", "")
+	t.Setenv("NAERYEO_TMAP_APP_KEY", "")
 
 	var stderr bytes.Buffer
 	code := runMCPHTTPCommand("", &stderr, slog.New(slog.DiscardHandler))
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "NAERYEO_MOTIS_URL") {
-		t.Errorf("stderr = %q, want mention of NAERYEO_MOTIS_URL", stderr.String())
+	if !strings.Contains(stderr.String(), "NAERYEO_TMAP_APP_KEY") {
+		t.Errorf("stderr = %q, want mention of NAERYEO_TMAP_APP_KEY", stderr.String())
 	}
 }
 
 func TestRunDispatchesMCPHTTPWithoutEnv(t *testing.T) {
-	t.Setenv("NAERYEO_MOTIS_URL", "")
+	t.Setenv("NAERYEO_PROVIDER", "")
+	t.Setenv("NAERYEO_TMAP_APP_KEY", "")
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"mcp", "--http"}, &stdout, &stderr, slog.New(slog.DiscardHandler))
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "NAERYEO_MOTIS_URL") {
-		t.Errorf("stderr = %q, want mention of NAERYEO_MOTIS_URL", stderr.String())
+	if !strings.Contains(stderr.String(), "NAERYEO_TMAP_APP_KEY") {
+		t.Errorf("stderr = %q, want mention of NAERYEO_TMAP_APP_KEY", stderr.String())
 	}
 }
 
@@ -518,7 +529,7 @@ func postJSONRPC(t *testing.T, url, body string, out *jsonRPCResponse) {
 
 func listToolsViaHTTP(t *testing.T) []map[string]any {
 	t.Helper()
-	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, okFinder), nil))
+	srv := httptest.NewServer(newHTTPMux(buildHTTPMCPServer("test", nil, okFinder, "test-source"), nil))
 	t.Cleanup(srv.Close)
 
 	var resp jsonRPCResponse
