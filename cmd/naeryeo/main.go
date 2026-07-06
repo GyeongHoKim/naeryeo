@@ -27,6 +27,19 @@ func main() {
 // there. CLI logs are quiet by default unless NAERYEO_LOG_LEVEL is set.
 // MCP logs default to Info because stderr is captured by the MCP host.
 func newLogger(args []string, w io.Writer, level string) *slog.Logger {
+	// A --debug flag on any subcommand (e.g. `naeryeo route ... --debug`)
+	// forces verbose logging to stderr so the per-request diagnostics
+	// (geocoder URL, HTTP status, provider error body) become visible without
+	// setting NAERYEO_LOG_LEVEL. It overrides the quiet CLI default below, but
+	// must still honor the per-command format contract — mcp stays JSON (its
+	// stderr is captured by the MCP host) while other commands use text.
+	if hasDebugFlag(args) {
+		opts := &slog.HandlerOptions{Level: slog.LevelDebug}
+		if isMCPCommand(args) {
+			return slog.New(slog.NewJSONHandler(w, opts))
+		}
+		return slog.New(slog.NewTextHandler(w, opts))
+	}
 	if strings.TrimSpace(level) == "" && !isMCPCommand(args) {
 		return slog.New(slog.DiscardHandler)
 	}
@@ -44,6 +57,19 @@ func newLogger(args []string, w io.Writer, level string) *slog.Logger {
 
 func isMCPCommand(args []string) bool {
 	return len(args) > 0 && args[0] == "mcp"
+}
+
+// hasDebugFlag reports whether a --debug (or -debug) flag appears anywhere in
+// args. It is scanned here, before subcommand flag parsing, because the logger
+// is built up front in main; the route subcommand also registers --debug in
+// its own FlagSet so the flag parses cleanly and appears in its usage.
+func hasDebugFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--debug" || a == "-debug" {
+			return true
+		}
+	}
+	return false
 }
 
 // parseLogLevel parses NAERYEO_LOG_LEVEL, defaulting to Info.

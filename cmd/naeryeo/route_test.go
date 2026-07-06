@@ -79,6 +79,40 @@ func TestRouteErrorMessage(t *testing.T) {
 		}
 	})
 
+	// A geocoder rejection message is shared with the MCP tool result, whose
+	// audience is an AI caller. It must be actionable and must never leak HTTP
+	// status/code/body — those belong in the logs.
+	noLeak := func(t *testing.T, msg string) {
+		t.Helper()
+		for _, leak := range []string{"400", "HTTP", "code", "코드", "--debug"} {
+			if strings.Contains(msg, leak) {
+				t.Errorf("msg = %q, must not leak %q to the (possibly AI) caller", msg, leak)
+			}
+		}
+	}
+
+	t.Run("rate-limit rejection tells the caller to retry shortly", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "call frequency exceeded"}, true)
+		if !strings.Contains(msg, "다시 시도") || !strings.Contains(msg, "일시적") {
+			t.Errorf("msg = %q, want a retry-shortly message", msg)
+		}
+		if strings.Contains(msg, "call frequency exceeded") {
+			t.Errorf("msg = %q, must not echo the provider body", msg)
+		}
+		noLeak(t, msg)
+	})
+
+	t.Run("bad-request rejection tells the caller to reformulate the location", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrGeocoderRejected{Status: 400, Code: "-2", Message: "query is required"}, true)
+		if !strings.Contains(msg, "위치를 인식하지 못했습니다") || !strings.Contains(msg, "구체적") {
+			t.Errorf("msg = %q, want a reformulate-location message", msg)
+		}
+		if strings.Contains(msg, "query is required") {
+			t.Errorf("msg = %q, must not echo the provider body", msg)
+		}
+		noLeak(t, msg)
+	})
+
 	t.Run("geocoder forbidden points at app service settings, not re-registration", func(t *testing.T) {
 		msg := routeErrorMessage(core.ErrGeocoderForbidden, true)
 		if !strings.Contains(msg, "권한이 거부") || !strings.Contains(msg, "활성화") {
@@ -109,6 +143,29 @@ func TestRunRoute_FR007Hint(t *testing.T) {
 		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, load, loadGeoPresent, findNotFound)
 		if strings.Contains(stderr.String(), "setup --geocoder") {
 			t.Errorf("stderr = %q, should not show the hint when a geocoder key exists", stderr.String())
+		}
+	})
+}
+
+func TestRunRoute_DebugFlagAppendsRawErrorChain(t *testing.T) {
+	load := func() (string, error) { return "test-key", nil }
+	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+		return core.RouteResult{}, &core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "limit"}
+	}
+
+	t.Run("--debug appends the raw error chain", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역", "--debug"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+		if !strings.Contains(stderr.String(), "[debug]") {
+			t.Errorf("stderr = %q, want the [debug] raw error chain", stderr.String())
+		}
+	})
+
+	t.Run("without --debug the raw chain is omitted", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+		if strings.Contains(stderr.String(), "[debug]") {
+			t.Errorf("stderr = %q, should not include the raw chain without --debug", stderr.String())
 		}
 	})
 }

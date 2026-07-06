@@ -99,3 +99,49 @@ func TestNewLogger_CLIDefaultIsQuiet(t *testing.T) {
 		t.Errorf("CLI logger output with unset NAERYEO_LOG_LEVEL = %q, want empty", buf.String())
 	}
 }
+
+func TestNewLogger_DebugFlagEnablesVerboseCLILogging(t *testing.T) {
+	var buf bytes.Buffer
+
+	// --debug must override the quiet CLI default (empty NAERYEO_LOG_LEVEL) and
+	// emit at Debug level so per-request diagnostics reach stderr.
+	logger := newLogger([]string{"route", "--from", "a", "--to", "b", "--debug"}, &buf, "")
+	logger.Debug("diagnostic")
+
+	if !strings.Contains(buf.String(), "diagnostic") {
+		t.Errorf("logger output with --debug = %q, want the debug line to be emitted", buf.String())
+	}
+}
+
+func TestNewLogger_DebugFlagPreservesJSONForMCP(t *testing.T) {
+	var buf bytes.Buffer
+
+	// --debug must not override the mcp JSON-format contract: the host captures
+	// mcp stderr and parses it as structured JSON.
+	logger := newLogger([]string{"mcp", "--debug"}, &buf, "")
+	logger.Debug("diagnostic")
+
+	if !strings.HasPrefix(strings.TrimSpace(buf.String()), "{") {
+		t.Errorf("logger output for mcp+--debug = %q, want JSON", buf.String())
+	}
+}
+
+func TestHasDebugFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"double dash", []string{"route", "--debug"}, true},
+		{"single dash", []string{"route", "-debug"}, true},
+		{"absent", []string{"route", "--from", "a"}, false},
+		{"empty", nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasDebugFlag(tt.args); got != tt.want {
+				t.Errorf("hasDebugFlag(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}

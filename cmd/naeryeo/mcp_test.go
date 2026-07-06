@@ -294,6 +294,30 @@ func TestFindTransitRouteTool_GeocoderMessagesMatchCLI(t *testing.T) {
 			t.Errorf("content = %q, want the geocoder auth-failed message", resultText(res))
 		}
 	})
+
+	// A geocoder 4xx rejection must reach the AI caller as an actionable
+	// natural-language message, never as a raw HTTP status/code/body.
+	t.Run("geocoder rejection reaches the AI as actionable text, not HTTP internals", func(t *testing.T) {
+		findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+			return core.RouteResult{}, &core.ErrGeocoderRejected{Status: 400, Code: "-2", Message: "query is required"}
+		}
+		server := buildMCPServer("test", discardLogger, load, loadGeoPresent, findRoute)
+		session := connectTestClient(t, server)
+
+		res := callFindTransitRoute(t, session, "아이디스 타워", "강남역")
+		if !res.IsError {
+			t.Fatal("IsError = false, want true")
+		}
+		text := resultText(res)
+		if !strings.Contains(text, "위치를 인식하지 못했습니다") {
+			t.Errorf("content = %q, want an actionable reformulate-location message", text)
+		}
+		for _, leak := range []string{"400", "HTTP", "query is required"} {
+			if strings.Contains(text, leak) {
+				t.Errorf("content = %q, must not leak %q to the AI caller", text, leak)
+			}
+		}
+	})
 }
 
 func TestFindTransitRouteTool_LogsToolCall(t *testing.T) {
