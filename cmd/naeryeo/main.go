@@ -28,11 +28,17 @@ func main() {
 // MCP logs default to Info because stderr is captured by the MCP host.
 func newLogger(args []string, w io.Writer, level string) *slog.Logger {
 	// A --debug flag on any subcommand (e.g. `naeryeo route ... --debug`)
-	// forces verbose text logging to stderr so the per-request diagnostics
+	// forces verbose logging to stderr so the per-request diagnostics
 	// (geocoder URL, HTTP status, provider error body) become visible without
-	// setting NAERYEO_LOG_LEVEL. It overrides the quiet CLI default below.
+	// setting NAERYEO_LOG_LEVEL. It overrides the quiet CLI default below, but
+	// must still honor the per-command format contract — mcp stays JSON (its
+	// stderr is captured by the MCP host) while other commands use text.
 	if hasDebugFlag(args) {
-		return slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		opts := &slog.HandlerOptions{Level: slog.LevelDebug}
+		if isMCPCommand(args) {
+			return slog.New(slog.NewJSONHandler(w, opts))
+		}
+		return slog.New(slog.NewTextHandler(w, opts))
 	}
 	if strings.TrimSpace(level) == "" && !isMCPCommand(args) {
 		return slog.New(slog.DiscardHandler)

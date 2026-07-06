@@ -74,6 +74,8 @@ func (e *ErrGeocoderRejected) Error() string {
 		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d, code %s): %s", e.Status, e.Code, e.Message)
 	case e.Message != "":
 		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d): %s", e.Status, e.Message)
+	case e.Code != "":
+		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d, code %s)", e.Status, e.Code)
 	default:
 		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d)", e.Status)
 	}

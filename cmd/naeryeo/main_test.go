@@ -113,6 +113,19 @@ func TestNewLogger_DebugFlagEnablesVerboseCLILogging(t *testing.T) {
 	}
 }
 
+func TestNewLogger_DebugFlagPreservesJSONForMCP(t *testing.T) {
+	var buf bytes.Buffer
+
+	// --debug must not override the mcp JSON-format contract: the host captures
+	// mcp stderr and parses it as structured JSON.
+	logger := newLogger([]string{"mcp", "--debug"}, &buf, "")
+	logger.Debug("diagnostic")
+
+	if !strings.HasPrefix(strings.TrimSpace(buf.String()), "{") {
+		t.Errorf("logger output for mcp+--debug = %q, want JSON", buf.String())
+	}
+}
+
 func TestHasDebugFlag(t *testing.T) {
 	tests := []struct {
 		name string
