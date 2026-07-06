@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 var (
@@ -76,6 +77,14 @@ func (e *ErrGeocoderRejected) Error() string {
 	default:
 		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d)", e.Status)
 	}
+}
+
+// RateLimited reports whether the rejection is a transient call-frequency
+// limit — Kakao code -10 ("call frequency exceeded") or HTTP 429 — rather than
+// a malformed request. Callers use it to decide whether to tell the caller to
+// retry shortly (limit) or to reformulate the location (bad request).
+func (e *ErrGeocoderRejected) RateLimited() bool {
+	return e.Status == http.StatusTooManyRequests || e.Code == "-10"
 }
 
 // ErrPointNotFound indicates the from and/or to location name could not be

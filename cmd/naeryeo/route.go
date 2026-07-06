@@ -120,16 +120,17 @@ func routeErrorMessage(err error, geocoderConfigured bool) string {
 	case errors.Is(err, core.ErrNoRoute):
 		return "두 지점 사이에 대중교통 경로가 없습니다"
 	case errors.As(err, &rejErr):
-		msg := fmt.Sprintf("장소 검색 요청이 거부되었습니다 (HTTP %d", rejErr.Status)
-		if rejErr.Code != "" {
-			msg += ", 코드 " + rejErr.Code
+		// A geocoder 4xx means the place-search request itself was refused.
+		// This message is shared with the MCP tool result (mcp.go), so its
+		// audience is an AI caller: give it an actionable next step and never
+		// leak the HTTP status/code/body (those go to the logs). A transient
+		// call-frequency limit is not the caller's input fault, so tell it to
+		// retry; anything else means the location could not be resolved, so
+		// tell it to reformulate.
+		if rejErr.RateLimited() {
+			return "장소 검색 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도하세요"
 		}
-		msg += ")"
-		if m := strings.TrimSpace(rejErr.Message); m != "" {
-			msg += ": " + m
-		}
-		msg += "\n짧은 시간에 요청이 많으면 일시적으로 거부될 수 있습니다. 자세한 내용은 --debug로 확인하세요"
-		return msg
+		return "입력하신 위치를 인식하지 못했습니다. 더 구체적인 주소(도로명·지번)나 인근 지하철역·정류장 이름으로 다시 시도하세요"
 	case errors.Is(err, core.ErrGeocoderUnavailable):
 		return "장소 검색 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요"
 	default:

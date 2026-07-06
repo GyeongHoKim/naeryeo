@@ -79,18 +79,38 @@ func TestRouteErrorMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("geocoder rejected surfaces the HTTP status and provider code", func(t *testing.T) {
-		msg := routeErrorMessage(&core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "call frequency exceeded"}, true)
-		for _, want := range []string{"400", "-10", "call frequency exceeded", "--debug"} {
-			if !strings.Contains(msg, want) {
-				t.Errorf("msg = %q, want substring %q", msg, want)
+	// A geocoder rejection message is shared with the MCP tool result, whose
+	// audience is an AI caller. It must be actionable and must never leak HTTP
+	// status/code/body — those belong in the logs.
+	noLeak := func(t *testing.T, msg string) {
+		t.Helper()
+		for _, leak := range []string{"400", "HTTP", "code", "코드", "--debug"} {
+			if strings.Contains(msg, leak) {
+				t.Errorf("msg = %q, must not leak %q to the (possibly AI) caller", msg, leak)
 			}
 		}
-		// A 400 rejection is not a transient connection failure — it must not
-		// reuse the "connect / try again later" wording.
-		if strings.Contains(msg, "연결할 수 없습니다") {
-			t.Errorf("msg = %q, should not describe a 400 as a connection failure", msg)
+	}
+
+	t.Run("rate-limit rejection tells the caller to retry shortly", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "call frequency exceeded"}, true)
+		if !strings.Contains(msg, "다시 시도") || !strings.Contains(msg, "일시적") {
+			t.Errorf("msg = %q, want a retry-shortly message", msg)
 		}
+		if strings.Contains(msg, "call frequency exceeded") {
+			t.Errorf("msg = %q, must not echo the provider body", msg)
+		}
+		noLeak(t, msg)
+	})
+
+	t.Run("bad-request rejection tells the caller to reformulate the location", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrGeocoderRejected{Status: 400, Code: "-2", Message: "query is required"}, true)
+		if !strings.Contains(msg, "위치를 인식하지 못했습니다") || !strings.Contains(msg, "구체적") {
+			t.Errorf("msg = %q, want a reformulate-location message", msg)
+		}
+		if strings.Contains(msg, "query is required") {
+			t.Errorf("msg = %q, must not echo the provider body", msg)
+		}
+		noLeak(t, msg)
 	})
 
 	t.Run("geocoder forbidden points at app service settings, not re-registration", func(t *testing.T) {
