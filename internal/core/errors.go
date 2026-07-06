@@ -41,10 +41,42 @@ var (
 	// can classify its result via errors.Is without importing the
 	// implementation — avoiding an import cycle.
 	ErrGeocoderNotFound = errors.New("core: geocoder found no matching place")
-	// ErrGeocoderUnavailable indicates a network error, timeout, non-2xx
-	// status, or unparseable response from the geocoder.
+	// ErrGeocoderUnavailable indicates a network error, timeout, unparseable
+	// response, or a server-side (5xx) failure from the geocoder — cases where
+	// no meaningful HTTP status is available or where retrying later may help.
+	// A client-side rejection (4xx) is reported as *ErrGeocoderRejected
+	// instead, so its status and provider code are preserved.
 	ErrGeocoderUnavailable = errors.New("core: geocoder is unavailable")
 )
+
+// ErrGeocoderRejected indicates the geocoder rejected the request with a
+// client-error HTTP status (4xx other than 401/403 — most commonly 400). It
+// preserves the HTTP status and, when the provider includes them, the
+// provider's error code and human-readable message, so the CLI can show the
+// real reason (e.g. Kakao's "-10" call-frequency limit) instead of a generic
+// "unavailable, try again later". Kept distinct from ErrGeocoderUnavailable,
+// which is reserved for network/timeout/parse/5xx failures.
+type ErrGeocoderRejected struct {
+	// Status is the HTTP status code (e.g. 400).
+	Status int
+	// Code is the provider's error code if present (e.g. Kakao "-10" or
+	// "InvalidArgument"), otherwise "".
+	Code string
+	// Message is the provider's error message if present, otherwise a trimmed
+	// snippet of the raw response body, otherwise "".
+	Message string
+}
+
+func (e *ErrGeocoderRejected) Error() string {
+	switch {
+	case e.Code != "" && e.Message != "":
+		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d, code %s): %s", e.Status, e.Code, e.Message)
+	case e.Message != "":
+		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d): %s", e.Status, e.Message)
+	default:
+		return fmt.Sprintf("core: geocoder rejected the request (HTTP %d)", e.Status)
+	}
+}
 
 // ErrPointNotFound indicates the from and/or to location name could not be
 // resolved to a real station or stop.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/GyeongHoKim/naeryeo/internal/core"
@@ -103,6 +104,65 @@ func TestKakaoResolve_ErrorMapping(t *testing.T) {
 			_, err := k.Resolve(context.Background(), "질의어")
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Resolve() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestKakaoResolve_HTTP4xxPreservesStatusAndBody(t *testing.T) {
+	tests := []struct {
+		name        string
+		body        string
+		wantCode    string
+		wantMessage string
+	}{
+		{
+			name:        "dapi errorType/message shape",
+			body:        `{"errorType":"InvalidArgument","message":"query is required"}`,
+			wantCode:    "InvalidArgument",
+			wantMessage: "query is required",
+		},
+		{
+			name:        "platform code/msg shape (e.g. -10 call-frequency exceeded)",
+			body:        `{"code":-10,"msg":"limit exceeded"}`,
+			wantCode:    "-10",
+			wantMessage: "limit exceeded",
+		},
+		{
+			name:        "non-JSON body is surfaced verbatim as the message",
+			body:        "Bad Request",
+			wantCode:    "",
+			wantMessage: "Bad Request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k := newKakao(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				if _, err := fmt.Fprint(w, tt.body); err != nil {
+					t.Fatalf("write body: %v", err)
+				}
+			})
+
+			_, err := k.Resolve(context.Background(), "질의어")
+
+			// A 400 must NOT be folded into the network-error bucket.
+			if errors.Is(err, core.ErrGeocoderUnavailable) {
+				t.Fatalf("Resolve() error = %v, should not be ErrGeocoderUnavailable for a 400", err)
+			}
+			var rej *core.ErrGeocoderRejected
+			if !errors.As(err, &rej) {
+				t.Fatalf("Resolve() error = %v, want *core.ErrGeocoderRejected", err)
+			}
+			if rej.Status != http.StatusBadRequest {
+				t.Errorf("Status = %d, want 400", rej.Status)
+			}
+			if rej.Code != tt.wantCode {
+				t.Errorf("Code = %q, want %q", rej.Code, tt.wantCode)
+			}
+			if !strings.Contains(rej.Message, tt.wantMessage) {
+				t.Errorf("Message = %q, want to contain %q", rej.Message, tt.wantMessage)
 			}
 		})
 	}

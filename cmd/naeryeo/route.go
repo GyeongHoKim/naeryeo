@@ -27,6 +27,7 @@ func runRoute(
 	fs.SetOutput(stderr)
 	from := fs.String("from", "", "출발지 (역/정류장 이름 또는 주소)")
 	to := fs.String("to", "", "도착지 (역/정류장 이름 또는 주소)")
+	debug := fs.Bool("debug", false, "실패 시 원본 HTTP 상태·에러 체인을 함께 출력합니다")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -53,7 +54,7 @@ func runRoute(
 
 	result, err := findRoute(context.Background(), apiKey, *from, *to)
 	if err != nil {
-		code, writeErr := reportRouteError(stderr, err, geocoderConfigured(loadGeocoder))
+		code, writeErr := reportRouteError(stderr, err, geocoderConfigured(loadGeocoder), *debug)
 		if writeErr != nil {
 			return 1
 		}
@@ -76,9 +77,16 @@ func geocoderConfigured(loadGeocoder func() (string, error)) bool {
 // reportRouteError writes a message describing err to stderr. It always
 // returns 1, since this is only called on an already-known error path; a
 // write failure while reporting that error is still surfaced via the
-// returned error so the caller cannot silently ignore it.
-func reportRouteError(stderr io.Writer, err error, geocoderConfigured bool) (int, error) {
-	_, writeErr := fmt.Fprintln(stderr, "naeryeo route: "+routeErrorMessage(err, geocoderConfigured))
+// returned error so the caller cannot silently ignore it. When debug is set
+// (--debug), the raw wrapped error chain is appended so failures whose
+// friendly message hides the underlying cause (e.g. a geocoder HTTP status)
+// are still diagnosable without re-running under NAERYEO_LOG_LEVEL.
+func reportRouteError(stderr io.Writer, err error, geocoderConfigured, debug bool) (int, error) {
+	msg := "naeryeo route: " + routeErrorMessage(err, geocoderConfigured)
+	if debug {
+		msg += fmt.Sprintf("\n[debug] %v", err)
+	}
+	_, writeErr := fmt.Fprintln(stderr, msg)
 	return 1, writeErr
 }
 
@@ -93,6 +101,7 @@ func reportRouteError(stderr io.Writer, err error, geocoderConfigured bool) (int
 // setting up a geocoder would actually help (spec 004).
 func routeErrorMessage(err error, geocoderConfigured bool) string {
 	var pointErr *core.ErrPointNotFound
+	var rejErr *core.ErrGeocoderRejected
 	switch {
 	case errors.Is(err, core.ErrAPIKeyMissing):
 		return "API 키가 설정되지 않았습니다. naeryeo setup을 먼저 실행하세요"
@@ -110,6 +119,17 @@ func routeErrorMessage(err error, geocoderConfigured bool) string {
 		return msg
 	case errors.Is(err, core.ErrNoRoute):
 		return "두 지점 사이에 대중교통 경로가 없습니다"
+	case errors.As(err, &rejErr):
+		msg := fmt.Sprintf("장소 검색 요청이 거부되었습니다 (HTTP %d", rejErr.Status)
+		if rejErr.Code != "" {
+			msg += ", 코드 " + rejErr.Code
+		}
+		msg += ")"
+		if m := strings.TrimSpace(rejErr.Message); m != "" {
+			msg += ": " + m
+		}
+		msg += "\n짧은 시간에 요청이 많으면 일시적으로 거부될 수 있습니다. 자세한 내용은 --debug로 확인하세요"
+		return msg
 	case errors.Is(err, core.ErrGeocoderUnavailable):
 		return "장소 검색 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요"
 	default:

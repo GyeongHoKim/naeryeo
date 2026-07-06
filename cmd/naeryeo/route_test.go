@@ -79,6 +79,20 @@ func TestRouteErrorMessage(t *testing.T) {
 		}
 	})
 
+	t.Run("geocoder rejected surfaces the HTTP status and provider code", func(t *testing.T) {
+		msg := routeErrorMessage(&core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "call frequency exceeded"}, true)
+		for _, want := range []string{"400", "-10", "call frequency exceeded", "--debug"} {
+			if !strings.Contains(msg, want) {
+				t.Errorf("msg = %q, want substring %q", msg, want)
+			}
+		}
+		// A 400 rejection is not a transient connection failure — it must not
+		// reuse the "connect / try again later" wording.
+		if strings.Contains(msg, "연결할 수 없습니다") {
+			t.Errorf("msg = %q, should not describe a 400 as a connection failure", msg)
+		}
+	})
+
 	t.Run("geocoder forbidden points at app service settings, not re-registration", func(t *testing.T) {
 		msg := routeErrorMessage(core.ErrGeocoderForbidden, true)
 		if !strings.Contains(msg, "권한이 거부") || !strings.Contains(msg, "활성화") {
@@ -109,6 +123,29 @@ func TestRunRoute_FR007Hint(t *testing.T) {
 		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, load, loadGeoPresent, findNotFound)
 		if strings.Contains(stderr.String(), "setup --geocoder") {
 			t.Errorf("stderr = %q, should not show the hint when a geocoder key exists", stderr.String())
+		}
+	})
+}
+
+func TestRunRoute_DebugFlagAppendsRawErrorChain(t *testing.T) {
+	load := func() (string, error) { return "test-key", nil }
+	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+		return core.RouteResult{}, &core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "limit"}
+	}
+
+	t.Run("--debug appends the raw error chain", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역", "--debug"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+		if !strings.Contains(stderr.String(), "[debug]") {
+			t.Errorf("stderr = %q, want the [debug] raw error chain", stderr.String())
+		}
+	})
+
+	t.Run("without --debug the raw chain is omitted", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+		if strings.Contains(stderr.String(), "[debug]") {
+			t.Errorf("stderr = %q, should not include the raw chain without --debug", stderr.String())
 		}
 	})
 }

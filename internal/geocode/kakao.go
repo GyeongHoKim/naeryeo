@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -105,6 +106,17 @@ func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, err
 		// app, or domain/IP restriction). Distinct from an invalid key (401).
 		return core.Coordinate{}, core.ErrGeocoderForbidden
 	}
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		// 4xx = Kakao rejected the request itself. For the local API this is
+		// almost always HTTP 400, which folds several distinct causes into one
+		// status (e.g. code -2 invalid params, -10 call-frequency exceeded).
+		// Read the body to recover the provider code/message so the caller can
+		// show the real reason instead of a generic "unavailable".
+		code, message := readErrorBody(resp.Body)
+		k.logger().Debug("geocode: request rejected",
+			"query", query, "status", resp.StatusCode, "code", code, "message", message)
+		return core.Coordinate{}, &core.ErrGeocoderRejected{Status: resp.StatusCode, Code: code, Message: message}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return core.Coordinate{}, fmt.Errorf("%w: unexpected HTTP status %d", core.ErrGeocoderUnavailable, resp.StatusCode)
 	}
@@ -127,4 +139,37 @@ func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, err
 		return core.Coordinate{}, fmt.Errorf("%w: parse latitude %q: %w", core.ErrGeocoderUnavailable, doc.Y, err)
 	}
 	return core.Coordinate{X: x, Y: y}, nil
+}
+
+// readErrorBody extracts a provider error code and message from a Kakao error
+// response. Kakao's REST errors use either {"errorType","message"} (dapi local)
+// or {"code","msg"} (platform APIs); a body that is not one of those shapes is
+// returned verbatim (trimmed) as the message so nothing is lost. Reads are
+// capped so a misbehaving upstream cannot stream an unbounded body.
+func readErrorBody(r io.Reader) (code, message string) {
+	raw, err := io.ReadAll(io.LimitReader(r, 2<<10))
+	if err != nil {
+		return "", ""
+	}
+
+	var eb struct {
+		ErrorType string      `json:"errorType"`
+		Message   string      `json:"message"`
+		Code      json.Number `json:"code"`
+		Msg       string      `json:"msg"`
+	}
+	if err := json.Unmarshal(raw, &eb); err == nil {
+		code = eb.ErrorType
+		if code == "" && eb.Code.String() != "" {
+			code = eb.Code.String()
+		}
+		message = eb.Message
+		if message == "" {
+			message = eb.Msg
+		}
+	}
+	if message == "" {
+		message = strings.TrimSpace(string(raw))
+	}
+	return code, message
 }
