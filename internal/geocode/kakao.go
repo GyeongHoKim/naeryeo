@@ -3,6 +3,7 @@ package geocode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +17,8 @@ import (
 )
 
 const defaultBaseURL = "https://dapi.kakao.com"
+const keywordPath = "/v2/local/search/keyword.json"
+const addressPath = "/v2/local/search/address.json"
 
 // keywordSearchResponse mirrors the subset of Kakao Local "search by
 // keyword" response fields this package consumes (contracts/geocode-kakao.md).
@@ -70,18 +73,30 @@ func (k *Kakao) logger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }
 
-// Resolve returns the coordinate of the top keyword-search match for query.
-// It returns the Geocoder error-contract sentinels defined in core:
-// core.ErrGeocoderNotFound if nothing matches, core.ErrGeocoderAuthFailed if
-// the key is rejected (HTTP 401), core.ErrGeocoderForbidden if the request is
-// denied (HTTP 403 — e.g. the map/local service is not enabled for the app),
-// and core.ErrGeocoderUnavailable for any network error, timeout, other
-// non-2xx status, or unparseable response.
+// Resolve returns the coordinate of the top match for query, trying keyword
+// search first and falling back to address search when the keyword endpoint
+// finds nothing. It returns the Geocoder error-contract sentinels defined in
+// core: core.ErrGeocoderNotFound if nothing matches either endpoint,
+// core.ErrGeocoderAuthFailed if the key is rejected (HTTP 401),
+// core.ErrGeocoderForbidden if the request is denied (HTTP 403), and
+// core.ErrGeocoderUnavailable for any network error, timeout, other non-2xx
+// status, or unparseable response.
 func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, error) {
+	coord, err := k.doSearch(ctx, keywordPath, query)
+	if errors.Is(err, core.ErrGeocoderNotFound) {
+		return k.doSearch(ctx, addressPath, query)
+	}
+	return coord, err
+}
+
+// doSearch issues a GET against the Kakao Local endpoint at path (e.g.
+// /v2/local/search/keyword.json or /v2/local/search/address.json), parses
+// the response, and returns the coordinate of the top match.
+func (k *Kakao) doSearch(ctx context.Context, path, query string) (core.Coordinate, error) {
 	// size=1: only the representative (top-ranked) match is needed;
 	// sort=accuracy is Kakao's default but set explicitly for clarity.
-	rawURL := fmt.Sprintf("%s/v2/local/search/keyword.json?query=%s&size=1&sort=accuracy",
-		k.baseURL(), url.QueryEscape(query))
+	rawURL := fmt.Sprintf("%s%s?query=%s&size=1&sort=accuracy",
+		k.baseURL(), path, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -91,12 +106,12 @@ func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, err
 
 	resp, err := k.httpClient().Do(req)
 	if err != nil {
-		k.logger().Debug("geocode: request failed", "query", query, "error", err)
+		k.logger().Debug("geocode: request failed", "path", path, "query", query, "error", err)
 		return core.Coordinate{}, fmt.Errorf("%w: %w", core.ErrGeocoderUnavailable, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	k.logger().Debug("geocode: keyword search", "query", query, "status", resp.StatusCode)
+	k.logger().Debug("geocode: search", "path", path, "query", query, "status", resp.StatusCode)
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return core.Coordinate{}, core.ErrGeocoderAuthFailed
@@ -113,7 +128,7 @@ func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, err
 		// Read the body to recover the provider code/message so the caller can
 		// show the real reason instead of a generic "unavailable".
 		code, message := readErrorBody(resp.Body)
-		k.logger().Debug("geocode: request rejected",
+		k.logger().Debug("geocode: request rejected", "path", path,
 			"query", query, "status", resp.StatusCode, "code", code, "message", message)
 		return core.Coordinate{}, &core.ErrGeocoderRejected{Status: resp.StatusCode, Code: code, Message: message}
 	}

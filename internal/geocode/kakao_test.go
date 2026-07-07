@@ -12,13 +12,34 @@ import (
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 )
 
-const keywordPath = "/v2/local/search/keyword.json"
+const testKeywordPath = "/v2/local/search/keyword.json"
+const testAddressPath = "/v2/local/search/address.json"
 
-// newKakao points a Kakao geocoder at a test server.
-func newKakao(t *testing.T, handler http.HandlerFunc) *Kakao {
+// newKakao points a Kakao geocoder at a test server. handler is registered
+// for the keyword search path; the address search path returns an empty
+// document list by default so existing tests that expect ErrGeocoderNotFound
+// from keyword-only still pass after the keyword→address fallback was added.
+func newKakao(t *testing.T, keywordHandler http.HandlerFunc) *Kakao {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc(keywordPath, handler)
+	mux.HandleFunc(testKeywordPath, keywordHandler)
+	mux.HandleFunc(testAddressPath, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, `{"documents":[]}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	k := NewKakao("test-key")
+	k.BaseURL = srv.URL
+	return k
+}
+
+// newKakaoWithAddress is like newKakao but also accepts a handler for the
+// address search path so fallback behaviour can be tested explicitly.
+func newKakaoWithAddress(t *testing.T, keywordHandler, addressHandler http.HandlerFunc) *Kakao {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc(testKeywordPath, keywordHandler)
+	mux.HandleFunc(testAddressPath, addressHandler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	k := NewKakao("test-key")
@@ -194,6 +215,120 @@ func TestKakaoResolve_SendsAuthHeaderAndEncodedQuery(t *testing.T) {
 	}
 	if gotQuery != "아이디스 타워" {
 		t.Errorf("decoded query param = %q, want %q", gotQuery, "아이디스 타워")
+	}
+}
+
+func TestKakaoResolve_KeywordSuccessSkipsAddress(t *testing.T) {
+	// When keyword search finds a match, address search must never be called.
+	addressCalled := false
+	k := newKakaoWithAddress(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"documents":[{"x":"127.1","y":"37.3"}]}`)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			addressCalled = true
+			writeJSON(t, w, `{"documents":[]}`)
+		},
+	)
+
+	got, err := k.Resolve(context.Background(), "아이디스 타워")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	if got.X != 127.1 || got.Y != 37.3 {
+		t.Errorf("Resolve() = %+v, want {X:127.1 Y:37.3}", got)
+	}
+	if addressCalled {
+		t.Error("address search was called when keyword search succeeded")
+	}
+}
+
+func TestKakaoResolve_KeywordNotFoundFallsBackToAddress(t *testing.T) {
+	// Keyword returns 0 documents → address search should be tried and succeed.
+	k := newKakaoWithAddress(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"documents":[]}`)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"documents":[{"x":"127.108","y":"37.401"}]}`)
+		},
+	)
+
+	got, err := k.Resolve(context.Background(), "경기도 고양시 일산동구 마두동 796-2")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	if got.X != 127.108 || got.Y != 37.401 {
+		t.Errorf("Resolve() = %+v, want {X:127.108 Y:37.401}", got)
+	}
+}
+
+func TestKakaoResolve_BothNotFound(t *testing.T) {
+	// Both keyword and address search return 0 documents.
+	k := newKakaoWithAddress(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"documents":[]}`)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"documents":[]}`)
+		},
+	)
+
+	_, err := k.Resolve(context.Background(), "존재하지않는주소")
+	if !errors.Is(err, core.ErrGeocoderNotFound) {
+		t.Fatalf("Resolve() error = %v, want ErrGeocoderNotFound", err)
+	}
+}
+
+func TestKakaoResolve_KeywordAuthFailSkipsAddress(t *testing.T) {
+	// When keyword search returns 401 (auth failure), address search must NOT
+	// be tried — the key is invalid for both endpoints.
+	addressCalled := false
+	k := newKakaoWithAddress(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			addressCalled = true
+		},
+	)
+
+	_, err := k.Resolve(context.Background(), "질의어")
+	if !errors.Is(err, core.ErrGeocoderAuthFailed) {
+		t.Fatalf("Resolve() error = %v, want ErrGeocoderAuthFailed", err)
+	}
+	if addressCalled {
+		t.Error("address search was called when keyword search failed with 401")
+	}
+}
+
+func TestKakaoResolve_AddressSearchSendsCorrectRequest(t *testing.T) {
+	// Verify the address search call uses the correct URL path, auth header,
+	// and query parameter.
+	var gotAuth, gotQuery, gotPath string
+	k := newKakaoWithAddress(t,
+		func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, `{"documents":[]}`)
+		},
+		func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+			gotQuery = r.URL.Query().Get("query")
+			gotPath = r.URL.Path
+			writeJSON(t, w, `{"documents":[{"x":"127.1","y":"37.3"}]}`)
+		},
+	)
+
+	if _, err := k.Resolve(context.Background(), "서울특별시 강남구"); err != nil {
+		t.Fatalf("Resolve() error = %v, want nil", err)
+	}
+	if gotAuth != "KakaoAK test-key" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "KakaoAK test-key")
+	}
+	if gotQuery != "서울특별시 강남구" {
+		t.Errorf("decoded query param = %q, want %q", gotQuery, "서울특별시 강남구")
+	}
+	if gotPath != testAddressPath {
+		t.Errorf("path = %q, want %q", gotPath, testAddressPath)
 	}
 }
 
