@@ -93,10 +93,17 @@ func (k *Kakao) Resolve(ctx context.Context, query string) (core.Coordinate, err
 // /v2/local/search/keyword.json or /v2/local/search/address.json), parses
 // the response, and returns the coordinate of the top match.
 func (k *Kakao) doSearch(ctx context.Context, path, query string) (core.Coordinate, error) {
-	// size=1: only the representative (top-ranked) match is needed;
-	// sort=accuracy is Kakao's default but set explicitly for clarity.
-	rawURL := fmt.Sprintf("%s%s?query=%s&size=1&sort=accuracy",
-		k.baseURL(), path, url.QueryEscape(query))
+	// size=1: only the representative (top-ranked) match is needed.
+	// sort=accuracy is Kakao keyword-search default, but the address-search
+	// endpoint does not accept a sort parameter — omit it for addressPath.
+	var rawURL string
+	if path == addressPath {
+		rawURL = fmt.Sprintf("%s%s?query=%s&size=1",
+			k.baseURL(), path, url.QueryEscape(query))
+	} else {
+		rawURL = fmt.Sprintf("%s%s?query=%s&size=1&sort=accuracy",
+			k.baseURL(), path, url.QueryEscape(query))
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {

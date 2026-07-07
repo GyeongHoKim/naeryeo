@@ -21,16 +21,9 @@ const testAddressPath = "/v2/local/search/address.json"
 // from keyword-only still pass after the keyword→address fallback was added.
 func newKakao(t *testing.T, keywordHandler http.HandlerFunc) *Kakao {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.HandleFunc(testKeywordPath, keywordHandler)
-	mux.HandleFunc(testAddressPath, func(w http.ResponseWriter, r *http.Request) {
+	return newKakaoWithAddress(t, keywordHandler, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, `{"documents":[]}`)
 	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	k := NewKakao("test-key")
-	k.BaseURL = srv.URL
-	return k
 }
 
 // newKakaoWithAddress is like newKakao but also accepts a handler for the
