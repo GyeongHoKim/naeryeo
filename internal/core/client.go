@@ -283,16 +283,13 @@ func (c *Client) searchStationByName(ctx context.Context, name string) (stationC
 			// -98 is meaningless for a single-point lookup; treat as not found.
 			return stationCandidate{}, errStationNotFound
 		}
-		var pointErr *ErrPointNotFound
-		if errors.As(err, &pointErr) {
-			// ODsay codes 3/4/5 (from/to/both not found) all mean this single
-			// name matched no stop. Normalize to errStationNotFound so the
-			// geocoder fallback engages; with no geocoder, resolveStation still
-			// yields errStationNotFound and FindRoute reports ErrPointNotFound
-			// with the correct side (spec 004 research §3 risk).
-			return stationCandidate{}, errStationNotFound
-		}
-		return stationCandidate{}, err
+		// Any ODsay application-level error from the station-search endpoint
+		// (codes 3/4/5/6/-99/-8/-9 or any unknown code) means this name did
+		// not match a transit stop. Fold to errStationNotFound so the
+		// geocoder fallback gets a chance; when no geocoder is configured,
+		// resolveStation still yields errStationNotFound and FindRoute
+		// reports ErrPointNotFound with the correct side.
+		return stationCandidate{}, errStationNotFound
 	}
 	candidateCount := 0
 	if resp.Result != nil {
