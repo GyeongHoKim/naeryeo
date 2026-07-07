@@ -524,40 +524,56 @@ func TestFindRoute_NoGeocoderKeepsLegacyNotFound(t *testing.T) {
 }
 
 // TestFindRoute_StationErrorCodeEngagesGeocoder guards the spec 004 research
-// §3 risk: if ODsay's searchStation reports a "not found" error code (3/4/5)
-// instead of an empty result, resolveStation must still normalize that to the
-// not-found signal so the geocoder fallback engages.
+// §3 risk: if ODsay's searchStation reports any error code instead of an
+// empty result, resolveStation must normalize it to the not-found signal so
+// the geocoder fallback engages. Every ODsay error code from the station
+// search — not just the "not found" codes 3/4/5 — should trigger the
+// fallback, because they all mean the name did not match a transit stop.
 func TestFindRoute_StationErrorCodeEngagesGeocoder(t *testing.T) {
-	stationCode3 := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(t, w, stationSearchResponse{Error: &odsayErrorBody{Code: "3", Message: "start not found"}})
+	codes := []struct {
+		code, label string
+	}{
+		{"3", "from not found"},
+		{"4", "to not found"},
+		{"5", "both not found"},
+		{"6", "out of service area"},
+		{"-99", "no result"},
+		{"-8", "format error"},
+		{"-9", "missing required param"},
 	}
 
-	t.Run("with geocoder configured, code 3 falls back and succeeds", func(t *testing.T) {
-		srv := newTestServer(t, stationCode3, okPathHandler(t))
-		geo := &fakeGeocoder{coord: Coordinate{X: 127.11, Y: 37.33}}
-		c := &Client{APIKey: "test-key", BaseURL: srv.URL, Geocoder: geo}
+	for _, tc := range codes {
+		stationHandler := func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(t, w, stationSearchResponse{Error: &odsayErrorBody{Code: flexibleString(tc.code), Message: tc.label}})
+		}
 
-		if _, err := c.FindRoute(context.Background(), "아이디스 타워", "수지구청"); err != nil {
-			t.Fatalf("FindRoute() error = %v, want nil (fallback should engage)", err)
-		}
-		if geo.calls == 0 {
-			t.Error("geocoder was never called; code 3 did not normalize to a not-found signal")
-		}
-	})
+		t.Run("geocoder configured, code "+tc.code+" falls back", func(t *testing.T) {
+			srv := newTestServer(t, stationHandler, okPathHandler(t))
+			geo := &fakeGeocoder{coord: Coordinate{X: 127.11, Y: 37.33}}
+			c := &Client{APIKey: "test-key", BaseURL: srv.URL, Geocoder: geo}
 
-	t.Run("without geocoder, code 3 still reports ErrPointNotFound", func(t *testing.T) {
-		srv := newTestServer(t, stationCode3, okPathHandler(t))
-		c := &Client{APIKey: "test-key", BaseURL: srv.URL} // no Geocoder
+			if _, err := c.FindRoute(context.Background(), "아이디스 타워", "수지구청"); err != nil {
+				t.Fatalf("FindRoute() error = %v, want nil (fallback should engage for code %s)", err, tc.code)
+			}
+			if geo.calls == 0 {
+				t.Errorf("geocoder was never called; code %s did not normalize to a not-found signal", tc.code)
+			}
+		})
 
-		_, err := c.FindRoute(context.Background(), "아이디스 타워", "수지구청")
-		var pointErr *ErrPointNotFound
-		if !errors.As(err, &pointErr) {
-			t.Fatalf("FindRoute() error = %v, want *ErrPointNotFound", err)
-		}
-		if pointErr.Side != "from" {
-			t.Errorf("Side = %q, want %q", pointErr.Side, "from")
-		}
-	})
+		t.Run("no geocoder, code "+tc.code+" reports ErrPointNotFound", func(t *testing.T) {
+			srv := newTestServer(t, stationHandler, okPathHandler(t))
+			c := &Client{APIKey: "test-key", BaseURL: srv.URL} // no Geocoder
+
+			_, err := c.FindRoute(context.Background(), "아이디스 타워", "수지구청")
+			var pointErr *ErrPointNotFound
+			if !errors.As(err, &pointErr) {
+				t.Fatalf("FindRoute() error = %v, want *ErrPointNotFound", err)
+			}
+			if pointErr.Side != "from" {
+				t.Errorf("Side = %q, want %q", pointErr.Side, "from")
+			}
+		})
+	}
 }
 
 func TestFindRoute_ConnectionRefused(t *testing.T) {
