@@ -256,6 +256,34 @@ func TestFindTransitRouteTool_UpstreamFailureThenRecovery(t *testing.T) {
 	}
 }
 
+// TestFindTransitRouteTool_TransportFailureNeverLeaksTheAPIKey covers the MCP
+// half of GYE-293's exit criteria. This path is the more damaging of the two:
+// the tool result is written into the model's context, so a leaked key would
+// be persisted in conversation history and sent onward to the model provider.
+func TestFindTransitRouteTool_TransportFailureNeverLeaksTheAPIKey(t *testing.T) {
+	load := func() (string, error) { return leakKey, nil }
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	server := buildMCPServer("test", logger, load, loadGeoAbsent, deadUpstreamFindRoute)
+	session := connectTestClient(t, server)
+
+	res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
+	if !res.IsError {
+		t.Fatal("IsError = false, want true for the transport failure")
+	}
+
+	raw, err := json.Marshal(res)
+	if err != nil {
+		t.Fatalf("marshal CallToolResult: %v", err)
+	}
+	// The whole result is checked, not just its text content: any future field
+	// that echoes the error would otherwise slip through.
+	assertNoAPIKey(t, string(raw), leakKey)
+	assertNoAPIKey(t, logs.String(), leakKey)
+}
+
 // TestFindTransitRouteTool_GeocoderMessagesMatchCLI verifies the MCP tool
 // produces the exact same geocoder-related wording as the CLI, since both go
 // through the shared routeErrorMessage (spec 004 FR-011).

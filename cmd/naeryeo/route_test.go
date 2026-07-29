@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -168,6 +169,55 @@ func TestRunRoute_DebugFlagAppendsRawErrorChain(t *testing.T) {
 			t.Errorf("stderr = %q, should not include the raw chain without --debug", stderr.String())
 		}
 	})
+}
+
+// leakKey is an ODsay API key containing characters url.QueryEscape rewrites,
+// so a redaction that only matched the raw key string would not satisfy the
+// assertions below.
+const leakKey = "super/secret+odsay=key"
+
+// deadUpstreamFindRoute routes through a real core.Client aimed at a closed
+// port. The resulting error is the genuine transport failure that used to
+// carry the ODsay API key (GYE-293) rather than a hand-built stand-in, so
+// these tests keep verifying the real thing if core's error wrapping changes.
+func deadUpstreamFindRoute(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	client := core.NewClient(apiKey)
+	client.BaseURL = "http://127.0.0.1:1"
+	return client.FindRoute(ctx, from, to)
+}
+
+func assertNoAPIKey(t *testing.T, s, apiKey string) {
+	t.Helper()
+	for _, form := range []string{apiKey, url.QueryEscape(apiKey), url.PathEscape(apiKey)} {
+		if strings.Contains(s, form) {
+			t.Errorf("output leaked the API key (as %q):\n%s", form, s)
+		}
+	}
+}
+
+// TestRunRoute_TransportFailureNeverLeaksTheAPIKey covers the CLI half of
+// GYE-293's exit criteria. --debug matters most here: it prints the raw error
+// chain, so it is the path a presentation-layer-only fix would have missed.
+func TestRunRoute_TransportFailureNeverLeaksTheAPIKey(t *testing.T) {
+	load := func() (string, error) { return leakKey, nil }
+
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "default output", args: []string{"--from", "강남역", "--to", "홍대입구역"}},
+		{name: "--debug output", args: []string{"--from", "강남역", "--to", "홍대입구역", "--debug"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := runRoute(tt.args, &stdout, &stderr, load, loadGeoAbsent, deadUpstreamFindRoute)
+
+			if code != 1 {
+				t.Fatalf("runRoute() code = %d, want 1; stderr = %q", code, stderr.String())
+			}
+			assertNoAPIKey(t, stdout.String()+stderr.String(), leakKey)
+		})
+	}
 }
 
 func TestWithThousandsSeparator(t *testing.T) {
