@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -43,6 +45,43 @@ func TestRedactURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRedactURLError(t *testing.T) {
+	const secret = "super-secret-key"
+	rawURL := "https://api.odsay.com/v1/api/searchStation?apiKey=" + secret + "&stationName=x"
+
+	t.Run("a *url.Error keeps its op and cause but loses the key", func(t *testing.T) {
+		cause := errors.New("connection refused")
+		got := redactURLError(&url.Error{Op: "Get", URL: rawURL, Err: cause})
+
+		if strings.Contains(got.Error(), secret) {
+			t.Errorf("redactURLError() = %q, leaked the API key", got)
+		}
+		for _, want := range []string{"Get", "REDACTED", "searchStation", "connection refused"} {
+			if !strings.Contains(got.Error(), want) {
+				t.Errorf("redactURLError() = %q, want substring %q", got, want)
+			}
+		}
+		if !errors.Is(got, cause) {
+			t.Errorf("redactURLError() = %q, want it to still unwrap to the cause", got)
+		}
+	})
+
+	t.Run("an unparseable URL is dropped whole rather than partially redacted", func(t *testing.T) {
+		got := redactURLError(&url.Error{Op: "parse", URL: "://" + secret, Err: errors.New("missing protocol scheme")})
+
+		if strings.Contains(got.Error(), secret) {
+			t.Errorf("redactURLError() = %q, leaked the API key", got)
+		}
+	})
+
+	t.Run("an error carrying no URL is returned unchanged", func(t *testing.T) {
+		cause := errors.New("some other failure")
+		if got := redactURLError(cause); got != cause {
+			t.Errorf("redactURLError() = %v, want the input error itself", got)
+		}
+	})
 }
 
 // TestFindRoute_NeverLogsTheAPIKey is the security-critical proof that no

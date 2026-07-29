@@ -122,14 +122,19 @@ func (c *Client) doGet(ctx context.Context, rawURL string, out any) (err error) 
 		)
 	}()
 
+	// rawURL carries the API key as a query parameter, so both errors below —
+	// url.Parse's and net/http's, each a *url.Error embedding the full URL —
+	// are redacted before being wrapped. Redacting after wrapping is not an
+	// option: it would have to discard the ErrUpstreamUnavailable wrapper to
+	// reach the *url.Error inside (GYE-293).
 	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if reqErr != nil {
-		return fmt.Errorf("%w: %w", ErrUpstreamUnavailable, reqErr)
+		return fmt.Errorf("%w: %w", ErrUpstreamUnavailable, redactURLError(reqErr))
 	}
 
 	resp, doErr := c.httpClient().Do(req)
 	if doErr != nil {
-		return fmt.Errorf("%w: %w", ErrUpstreamUnavailable, doErr)
+		return fmt.Errorf("%w: %w", ErrUpstreamUnavailable, redactURLError(doErr))
 	}
 	statusCode = resp.StatusCode
 	defer func() {

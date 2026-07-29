@@ -1,12 +1,16 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -582,5 +586,97 @@ func TestFindRoute_ConnectionRefused(t *testing.T) {
 	_, err := c.FindRoute(context.Background(), "강남역", "홍대입구역")
 	if !errors.Is(err, ErrUpstreamUnavailable) {
 		t.Fatalf("FindRoute() error = %v, want ErrUpstreamUnavailable", err)
+	}
+}
+
+// hangUpHandler answers a request by closing the TCP connection without
+// writing a response, so the client's in-flight request fails at the
+// transport layer (EOF/reset) rather than with an HTTP status.
+func hangUpHandler(t *testing.T) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Errorf("ResponseWriter is not a http.Hijacker")
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Errorf("Hijack: %v", err)
+			return
+		}
+		if err := conn.Close(); err != nil {
+			t.Errorf("close hijacked conn: %v", err)
+		}
+	}
+}
+
+// TestFindRoute_TransportErrorNeverLeaksTheAPIKey is the security-critical
+// proof for GYE-293: ODsay takes the API key as a query parameter, so any
+// transport-layer failure yields a *url.Error whose message embeds the full
+// request URL. Nothing that reaches a caller — the CLI's --debug dump or the
+// MCP tool's error text — may contain the key.
+//
+// leakKey deliberately contains characters that url.QueryEscape rewrites, so
+// a redaction that only searches for the raw key string does not pass.
+func TestFindRoute_TransportErrorNeverLeaksTheAPIKey(t *testing.T) {
+	const leakKey = "super/secret+odsay=key"
+
+	stations := map[string]stationCandidate{
+		"강남역":   {Name: "강남역", X: 127.0, Y: 37.5},
+		"홍대입구역": {Name: "홍대입구역", X: 126.9, Y: 37.5},
+	}
+
+	tests := []struct {
+		name    string
+		baseURL func(t *testing.T) string
+	}{
+		{
+			name:    "connection refused on station search",
+			baseURL: func(*testing.T) string { return "http://127.0.0.1:1" },
+		},
+		{
+			name: "upstream hangs up during station search",
+			baseURL: func(t *testing.T) string {
+				return newTestServer(t, hangUpHandler(t), nil).URL
+			},
+		},
+		{
+			name: "upstream hangs up during path search",
+			baseURL: func(t *testing.T) string {
+				return newTestServer(t, stationHandler(t, stations), hangUpHandler(t)).URL
+			},
+		},
+		{
+			name:    "unparseable base URL fails request construction",
+			baseURL: func(*testing.T) string { return "http://[::1]:namedport" },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Debug level, so the per-request log line that echoes the failing
+			// URL and error is exercised too, not just the returned error.
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			c := &Client{APIKey: leakKey, BaseURL: tt.baseURL(t), Logger: logger}
+
+			_, err := c.FindRoute(context.Background(), "강남역", "홍대입구역")
+			if !errors.Is(err, ErrUpstreamUnavailable) {
+				t.Fatalf("FindRoute() error = %v, want ErrUpstreamUnavailable", err)
+			}
+			assertNoAPIKey(t, err.Error(), leakKey)
+			assertNoAPIKey(t, logs.String(), leakKey)
+		})
+	}
+}
+
+// assertNoAPIKey fails if s contains apiKey in any form the request URL could
+// carry it: verbatim, percent-encoded, or with '+' standing in for a space.
+func assertNoAPIKey(t *testing.T, s, apiKey string) {
+	t.Helper()
+	for _, form := range []string{apiKey, url.QueryEscape(apiKey), url.PathEscape(apiKey)} {
+		if strings.Contains(s, form) {
+			t.Errorf("output leaked the API key (as %q):\n%s", form, s)
+		}
 	}
 }

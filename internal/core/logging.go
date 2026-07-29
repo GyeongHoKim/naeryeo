@@ -23,6 +23,29 @@ func redactURL(rawURL string) string {
 	return u.String()
 }
 
+// redactURLError returns err with the request URL carried by any *url.Error
+// in its chain rewritten by redactURL. It is the counterpart to redactURL for
+// error values rather than log lines: ODsay authenticates via an apiKey query
+// parameter, and both net/http (transport failures) and url.Parse (malformed
+// URLs) report failures as a *url.Error whose Error() embeds the full request
+// URL — so returning one verbatim would put the user's key in front of
+// whoever reads the error (CLI stderr, --debug output, an MCP tool result).
+//
+// Errors with no *url.Error in the chain are returned unchanged. Wrappers
+// above the *url.Error, if any, are dropped along with whatever they might
+// have interpolated from it; callers apply this to a raw net/http or url.Parse
+// return value, where the *url.Error is the outermost error and nothing is
+// lost.
+func redactURLError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	redacted := *urlErr
+	redacted.URL = redactURL(urlErr.URL)
+	return &redacted
+}
+
 // logger returns c.Logger, or a discard logger if unset. Mirrors the
 // existing httpClient()/baseURL() nil-defaulting helpers.
 func (c *Client) logger() *slog.Logger {
