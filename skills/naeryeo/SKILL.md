@@ -86,26 +86,46 @@ not found.
 
 ### Option A — CLI (one-off query)
 
+Always pass `--json`. It returns one machine-readable document on stdout for
+both success and failure, so you never have to parse Korean prose:
+
 ```bash
-naeryeo route --from "강남역" --to "홍대입구역"
+naeryeo route --from "강남역" --to "홍대입구역" --json
 ```
 
-Example output:
+Success:
 
+```json
+{
+  "totalTimeMinutes": 42,
+  "transferCount": 1,
+  "fareWon": 1500,
+  "steps": [
+    "강남역에서 2호선 승차 (구로디지털단지 방면)",
+    "신도림역에서 2호선 → 경의중앙선 환승",
+    "홍대입구역 하차"
+  ]
+}
 ```
-강남역 → 홍대입구역 (약 42분, 환승 1회)
 
-1. 강남역에서 2호선 승차 (구로디지털단지 방면)
-2. 신도림역에서 2호선 → 경의중앙선 환승
-3. 홍대입구역 하차
+**Check the `error` key to tell success from failure** — that single key is the
+signal. It is absent on success and present on failure. The exit code says the
+same thing (0 / 1), so either works.
 
-요금: 1,500원
-```
+Two success fields deserve care:
+
+- `noTravelNeeded: true` means the two points are effectively the same place, so
+  no trip is needed. It is not a failure.
+- `steps` is already ordered; relay it in order.
 
 Pass the user's origin and destination to `--from` and `--to`, then relay the
-returned route (time, transfers, fare, and the numbered steps) back in natural
-language. Station and stop names always work; building names and street addresses
-work only when the optional place-search key (see Prerequisites §3) is configured.
+route (time, transfers, fare, steps) back in natural language. Station and stop
+names always work; building names and street addresses work only when the
+optional place-search key (see Prerequisites §3) is configured.
+
+Without `--json` the same command prints a human-readable summary instead —
+useful if you are showing raw command output to the user, but prefer `--json`
+for anything you have to interpret.
 
 ### Option B — MCP server (persistent, for chat clients)
 
@@ -128,28 +148,61 @@ No API key goes in this config — the server reuses the key stored by `naeryeo 
 
 ## Handling errors
 
-Relay the underlying reason to the user; do not retry blindly.
+A failure looks like this — `code` is what you branch on, `message` is what you
+relay to the user:
 
-- **No API key stored** → tell the user to run `naeryeo setup` first.
-- **Unrecognized place** → the origin/destination could not be resolved. If it was a
-  station/stop name, ask for a more specific one. If it was a building name or
-  address, naeryeo appends a hint to set up the place-search key; relay it — the user
-  needs to run `naeryeo setup --geocoder` (see Prerequisites §3) for those to work.
-- **No route found** → no public-transit path exists between the two points.
-- **Invalid/expired ODsay key** → the stored routing key was rejected; suggest
-  re-running `naeryeo setup`. (Note: some ODsay keys are IP-restricted and only work
-  from the machine/network they were issued for.)
-- **Invalid place-search key** → the stored Kakao key was rejected; suggest
-  re-running `naeryeo setup --geocoder`. This is distinct from the ODsay key error.
+```json
+{
+  "error": {
+    "code": "geocoder_rate_limited",
+    "message": "장소 검색 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도하세요"
+  }
+}
+```
+
+**Branch on `code`, never on `message`.** Message wording can change at any
+time; codes are stable. Relay `message` to the user as-is, and relay `hint` too
+when it is present.
+
+| `code` | What to do | Retry? |
+| --- | --- | :---: |
+| `api_key_missing` | Tell the user to run `naeryeo setup` | ❌ |
+| `auth_failed` | The routing key was rejected — tell the user to re-run `naeryeo setup`. Some ODsay keys are IP-restricted and only work from the machine they were issued for | ❌ |
+| `geocoder_auth_failed` | The place-search key was rejected — tell the user to re-run `naeryeo setup --geocoder` | ❌ |
+| `geocoder_forbidden` | **Different from the above**: the key is valid but the Kakao app's settings deny it. Tell the user to enable the 카카오맵(로컬) service and check domain/IP restrictions in the Kakao console. Re-registering the key will NOT help | ❌ |
+| `geocoder_rate_limited` | A transient rate limit. **Send the same request again shortly** | ✅ |
+| `geocoder_rejected` | **Different from the above**: the location could not be resolved. Reformulate — use a road-name/lot-number address or a nearby station name. Resending the same input is pointless | ❌ |
+| `point_not_found` | Read `side` (`from` / `to` / `both`) and re-ask about only that endpoint. `name` is the input that failed | ❌ |
+| `no_route` | No transit route connects the two points. Report it | ❌ |
+| `geocoder_unavailable` | Place-search service unreachable | ✅ |
+| `upstream_unavailable` | Routing service unreachable | ✅ |
+| `upstream_rejected` | The routing service refused the request. Report it and suggest checking the endpoints | ❌ |
+| `credential_store_error` | The OS keychain could not be read. Relay the `hint` | ❌ |
+| `invalid_arguments` | The command was malformed. Fix the invocation and retry | ❌ |
+| `internal_error` | Unexpected. Report it to the user | ❌ |
+
+If you see a code that is not in this table, relay `message` and do not retry.
+
+The two pairs worth re-reading: `geocoder_rate_limited` vs `geocoder_rejected`
+(retry vs reformulate), and `geocoder_auth_failed` vs `geocoder_forbidden`
+(re-register vs fix console settings). Getting these backwards means either a
+pointless retry loop or telling the user to redo something that cannot help.
 
 ## Common Mistakes
 
 - **Quote place names that contain spaces.** Use
-  `naeryeo route --from "아이디스 타워" --to "수지구청"`. An unquoted name with a space is
-  split into separate arguments and the command fails with
-  `--from과 --to를 모두 입력해야 합니다`.
+  `naeryeo route --from "아이디스 타워" --to "수지구청" --json`. An unquoted name with a
+  space is split into separate arguments and the command fails with
+  `invalid_arguments`.
+- **Do not match on error text.** Branch on `error.code`. The Korean wording in
+  `message` is for the user, not for you, and it is free to change.
+- **`noTravelNeeded` is a success, not a failure.** It means the two points are
+  close enough that no trip is needed — do not report it as "no route found"
+  (that is `no_route`).
 - **Building names and addresses need the place-search key** (Prerequisites §3).
   Without it only station and stop names resolve; a building name returns
-  "not found" plus a hint to run `naeryeo setup --geocoder`.
+  `point_not_found` plus a `hint` to run `naeryeo setup --geocoder`.
+- **`--debug` writes to stderr, never to stdout.** Combining it with `--json`
+  is safe: stdout stays a single parseable document.
 - **Do not put API keys in `claude_desktop_config.json`.** The MCP server and CLI
   share the same keychain-stored keys — running `naeryeo setup` once covers both.

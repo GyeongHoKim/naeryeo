@@ -172,6 +172,7 @@ Claude Desktop 등 MCP 클라이언트에 붙여, 대화 중 자연어로 경로
 | `naeryeo logout` | 저장된 ODsay API 키 삭제 |
 | `naeryeo logout --geocoder` | 저장된 장소 검색 API 키 삭제 |
 | `naeryeo route --from <출발지> --to <도착지>` | 경로 검색 (CLI 모드) |
+| `naeryeo route ... --json` | 결과를 JSON 문서 하나로 출력 — 성공·실패 모두 표준 출력, 실패 시 `error.code`로 원인 구분 (AI 에이전트용) |
 | `naeryeo mcp` | MCP stdio 서버로 기동 |
 | `naeryeo --version` | 버전 확인 |
 
