@@ -72,9 +72,9 @@ naeryeo route --from <출발지> --to <도착지> [--json] [--debug]
 > 내보내면 모든 실패 문서에도 `"totalTimeMinutes":0,"transferCount":0,"fareWon":0`이
 > 따라붙는다. "실패 문서에는 성공 필드가 나타나지 않는다"는 불변식(data-model.md §3)이
 > 깨지는 쪽이 더 큰 손해라 판단했다.
-
-> MCP 도구의 성공 출력과 **같은 Go 타입**에서 직렬화된다 (data-model.md §3). 스키마가 갈라질
-> 수 없다.
+>
+> 이 봉투는 MCP 도구의 성공 출력과 **같은 Go 타입**에서 직렬화된다 (data-model.md §3).
+> 스키마가 갈라질 수 없다.
 
 ## 실패 문서
 
