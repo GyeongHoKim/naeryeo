@@ -64,8 +64,22 @@ func isMCPCommand(args []string) bool {
 // is built up front in main; the route subcommand also registers --debug in
 // its own FlagSet so the flag parses cleanly and appears in its usage.
 func hasDebugFlag(args []string) bool {
+	return hasFlagNamed(args, "debug")
+}
+
+// hasJSONFlag reports whether --json (or -json) appears anywhere in args. Like
+// hasDebugFlag it has to be answered BEFORE the subcommand's FlagSet parses,
+// because a parse failure is itself something --json must report as a JSON
+// document — by the time flag.Parse returns an error it has already written
+// usage text to its output (spec 005 FR-015, research.md R4).
+func hasJSONFlag(args []string) bool {
+	return hasFlagNamed(args, "json")
+}
+
+// hasFlagNamed reports whether --name or -name appears anywhere in args.
+func hasFlagNamed(args []string, name string) bool {
 	for _, a := range args {
-		if a == "--debug" || a == "-debug" {
+		if a == "--"+name || a == "-"+name {
 			return true
 		}
 	}

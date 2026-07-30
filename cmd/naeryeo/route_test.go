@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -320,9 +322,10 @@ func TestRunRoute_ErrorMessages(t *testing.T) {
 	load := func() (string, error) { return "test-key", nil }
 
 	tests := []struct {
-		name    string
-		findErr error
-		want    string
+		name     string
+		findErr  error
+		want     string
+		dontWant string
 	}{
 		{
 			name:    "point not found",
@@ -334,10 +337,23 @@ func TestRunRoute_ErrorMessages(t *testing.T) {
 			findErr: core.ErrNoRoute,
 			want:    "경로가 없습니다",
 		},
+		// The upstream cases pass WRAPPED errors on purpose. Before spec 005
+		// these fell through routeErrorMessage's default branch, which
+		// formatted the error with %v and printed the provider's own text —
+		// including things like "internal db timeout at shard 7". Handing a
+		// bare sentinel to this test would not have caught that, because a bare
+		// sentinel has nothing to leak. dontWant is what actually verifies it.
 		{
-			name:    "upstream unavailable",
-			findErr: core.ErrUpstreamUnavailable,
-			want:    "오류가 발생했습니다",
+			name:     "upstream unavailable",
+			findErr:  fmt.Errorf("%w: dial tcp 127.0.0.1:1: connect: connection refused", core.ErrUpstreamUnavailable),
+			want:     "경로 검색 서비스에 연결할 수 없습니다",
+			dontWant: "connection refused",
+		},
+		{
+			name:     "upstream rejected",
+			findErr:  fmt.Errorf("searching route: %w", &core.ErrUpstreamRejected{Code: "500", Message: "Server Error: internal db timeout at shard 7 (trace 0xdeadbeef)"}),
+			want:     "경로 검색 서비스가 요청을 처리하지 못했습니다",
+			dontWant: "shard 7",
 		},
 	}
 
@@ -356,6 +372,38 @@ func TestRunRoute_ErrorMessages(t *testing.T) {
 			if !strings.Contains(stderr.String(), tt.want) {
 				t.Errorf("stderr = %q, want substring %q", stderr.String(), tt.want)
 			}
+			if tt.dontWant != "" && strings.Contains(stderr.String(), tt.dontWant) {
+				t.Errorf("stderr leaked the wrapped cause %q:\n%s", tt.dontWant, stderr.String())
+			}
 		})
+	}
+}
+
+// TestRunRoute_CredentialStoreErrorIsClassified covers the other path that used
+// to interpolate a raw error into user-facing output — route.go's
+// "API 키 조회 실패: %v" for a keychain that could not be read at all.
+func TestRunRoute_CredentialStoreErrorIsClassified(t *testing.T) {
+	const storeErr = "keyring: exec gpg: no such file or directory"
+	load := func() (string, error) { return "", errors.New(storeErr) }
+	called := false
+	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+		called = true
+		return core.RouteResult{}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+
+	if code != 1 {
+		t.Fatalf("code = %d, want 1", code)
+	}
+	if called {
+		t.Error("findRoute was called despite the credential store failing")
+	}
+	if strings.Contains(stderr.String(), storeErr) {
+		t.Errorf("stderr leaked the keychain error:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "불러오지 못했습니다") {
+		t.Errorf("stderr = %q, want the classified credential-store message", stderr.String())
 	}
 }
