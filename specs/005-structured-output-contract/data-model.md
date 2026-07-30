@@ -45,7 +45,9 @@
 - `Message`·`Hint` 어디에도 외부 제공자·저장소의 **원본 문자열이 포함되지 않는다** (FR-005).
   원본 값은 `--debug` 경로에서 stderr로만 나간다 (R5).
 - `Side`/`Name`은 `Code == point_not_found`일 때만 채워진다 (FR-012).
-- `Hint`는 `point_not_found` + 지오코더 미설정일 때만 채워진다 (기존 FR-007 조건 유지).
+- `Hint`는 조치가 실제로 도움이 될 때만 채워진다. 현재 해당하는 코드는 둘이다 —
+  `point_not_found`(지오코더 미설정일 때만, 기존 FR-007 조건 유지)와
+  `credential_store_error`(항상).
 
 **상태 전이**: 없음 (순수 값).
 

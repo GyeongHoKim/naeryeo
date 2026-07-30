@@ -112,8 +112,12 @@ Success:
 signal. It is absent on success and present on failure. The exit code says the
 same thing (0 / 1), so either works.
 
-Two success fields deserve care:
+Three things about the success document:
 
+- **A missing numeric field means zero, not "unknown."** Zero-valued fields are
+  omitted, so a direct route has no `transferCount` and a free one has no
+  `fareWon`. `{"totalTimeMinutes": 18, "steps": [...]}` means 0 transfers and
+  0 won — do not report it as missing data.
 - `noTravelNeeded: true` means the two points are effectively the same place, so
   no trip is needed. It is not a failure.
 - `steps` is already ordered; relay it in order.

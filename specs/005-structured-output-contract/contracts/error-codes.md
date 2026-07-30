@@ -47,7 +47,10 @@
   유지한다 (FR-007, FR-013).
 - 어느 필드에도 외부 제공자·저장소의 **원본 문자열이 들어가지 않는다** (FR-005).
 
-현재 `hint`를 갖는 유일한 코드는 `point_not_found`(지오코더 미설정 시)다.
+현재 `hint`를 갖는 코드는 둘이다:
+
+- `point_not_found` — 지오코더 미설정 시에만
+- `credential_store_error` — 항상 (키체인 접근 권한 확인 안내)
 
 ## `point_not_found` 부가 필드
 

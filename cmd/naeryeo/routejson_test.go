@@ -277,6 +277,51 @@ func TestRunRouteJSON_Success(t *testing.T) {
 	}
 }
 
+// TestRunRouteJSON_ZeroValuedSuccessFieldsAreOmitted pins the presence
+// semantics of the success document. A direct route has transferCount 0 and a
+// free one fareWon 0, and omitempty drops both from the JSON — so the contract
+// is "absent numeric field means zero", not "absent means unknown".
+//
+// This is documented in contracts/cli-json.md and SKILL.md rather than fixed by
+// dropping omitempty: the envelope is one type, so emitting zero values on
+// success would also stamp "totalTimeMinutes":0,"transferCount":0,"fareWon":0
+// onto every failure document.
+func TestRunRouteJSON_ZeroValuedSuccessFieldsAreOmitted(t *testing.T) {
+	findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
+		return core.RouteResult{
+			TotalTime:     18,
+			TransferCount: 0,
+			Fare:          0,
+			Steps:         []core.RouteStep{{Description: "강남역에서 2호선 승차 → 역삼역에서 하차"}},
+		}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runRoute(
+		[]string{"--from", "강남역", "--to", "역삼역", "--json"},
+		&stdout, &stderr, okLoad, loadGeoPresent, findRoute,
+	); code != 0 {
+		t.Fatalf("code = %d, want 0", code)
+	}
+
+	raw := stdout.String()
+	for _, absent := range []string{`"transferCount"`, `"fareWon"`} {
+		if strings.Contains(raw, absent) {
+			t.Errorf("expected %s to be omitted for a zero value, got: %s", absent, raw)
+		}
+	}
+
+	// The documented consequence: decoding still yields 0, so a caller that
+	// unmarshals into a struct (rather than probing key presence) is correct.
+	got := decodeEnvelope(t, raw)
+	if got.TransferCount != 0 || got.FareWon != 0 {
+		t.Errorf("decoded transferCount/fareWon = %d/%d, want 0/0", got.TransferCount, got.FareWon)
+	}
+	if got.TotalTimeMinutes != 18 {
+		t.Errorf("TotalTimeMinutes = %d, want 18", got.TotalTimeMinutes)
+	}
+}
+
 // TestRunRouteJSON_NoTravelNeeded keeps "you are already there" from being read
 // as "the search returned nothing": a zero duration alone is ambiguous, the
 // explicit flag is not.

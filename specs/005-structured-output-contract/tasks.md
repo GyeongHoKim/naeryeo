@@ -77,10 +77,11 @@ MCP 두 진입점 모두에 적용한다.
 - [X] T009 [P] [US1] `cmd/naeryeo/errcode_test.go`에 `*core.ErrGeocoderRejected`가 `RateLimited()` 여부로 `geocoder_rate_limited` / `geocoder_rejected`로 갈리는지 테이블 테스트 추가 (HTTP 429, Kakao code `-10`, 그 외 400 케이스)
 - [X] T010 [P] [US1] `cmd/naeryeo/errcode_test.go`에 `core.ErrGeocoderAuthFailed` → `geocoder_auth_failed`, `core.ErrGeocoderForbidden` → `geocoder_forbidden`이 **서로 다른 코드**임을 검증하는 테스트 추가
 - [X] T011 [P] [US1] `cmd/naeryeo/errcode_test.go`에 `*core.ErrPointNotFound` → `point_not_found` + `Side`/`Name` 전달 + 지오코더 미설정 시에만 `Hint`가 채워지는지 테스트 추가
-- [X] T012 [P] [US1] `cmd/naeryeo/route_test.go`에 `--json` 실패 시 **stdout**에 파싱 가능한 문서 하나가 나오고 stderr가 비며 exit 1인지 검증하는 테스트 추가 ([contracts/cli-json.md](./contracts/cli-json.md) 매트릭스)
-- [X] T013 [P] [US1] `cmd/naeryeo/route_test.go`에 `--from`/`--to` 누락과 알 수 없는 플래그가 `--json` 모드에서 `invalid_arguments` 문서로 나오고 stdout에 사용법 텍스트가 섞이지 않는지 테스트 추가 (FR-015)
-- [X] T014 [P] [US1] `cmd/naeryeo/mcp_test.go`에 in-memory transport 종단 테스트 추가 — 실패 시 `IsError == true`이고 `StructuredContent`에 `error.code`가 존재하며 `Content[0].Text`가 프로즈인지 검증 ([contracts/mcp-tool.md](./contracts/mcp-tool.md))
-- [X] T015 [P] [US1] `cmd/naeryeo/mcp_test.go`의 `TestFindTransitRouteTool_GeocoderMessagesMatchCLI`를 확장 — 문구뿐 아니라 **`code`까지** CLI와 일치하는지 비교 (FR-016)
+- [X] T012 [P] [US1] `cmd/naeryeo/routejson_test.go`(신규)에 `--json` 실패 시 **stdout**에 파싱 가능한 문서 하나가 나오고 stderr가 비며 exit 1인지 검증하는 테스트 추가 ([contracts/cli-json.md](./contracts/cli-json.md) 매트릭스)
+- [X] T013 [P] [US1] `cmd/naeryeo/routejson_test.go`에 `--from`/`--to` 누락과 알 수 없는 플래그가 `--json` 모드에서 `invalid_arguments` 문서로 나오고 stdout에 사용법 텍스트가 섞이지 않는지 테스트 추가 (FR-015)
+- [X] T014 [P] [US1] `cmd/naeryeo/mcpjson_test.go`(신규)에 in-memory transport 종단 테스트 추가 — 실패 시 `IsError == true`이고 `StructuredContent`에 `error.code`가 존재하며 `Content[0].Text`가 프로즈인지 검증 ([contracts/mcp-tool.md](./contracts/mcp-tool.md))
+- [X] T015 [P] [US1] CLI와 MCP가 같은 실패에 **같은 `code`와 같은 문구**를 내는지 비교하는 테스트 (FR-016)
+  > **구현 중 조정**: 기존 `mcp_test.go`의 `TestFindTransitRouteTool_GeocoderMessagesMatchCLI`를 확장하는 대신, `mcpjson_test.go`에 `TestFindTransitRouteTool_FailureMatchesCLICodeAndMessage`를 신설했다. 기존 테스트는 프로즈 문구 회귀를 잡는 역할이 있어 무수정으로 통과시키는 편이 SC-007 검증에 유리하다.
 
 ### Implementation for User Story 1
 
@@ -106,9 +107,9 @@ MCP 두 진입점 모두에 적용한다.
 
 ### Tests for User Story 2 (MANDATORY per Constitution Principle II) ⚠️
 
-- [X] T021 [P] [US2] `cmd/naeryeo/route_test.go`에 `--json` 성공 시 stdout에 성공 문서 하나 + exit 0 + `error` 키 부재를 검증하는 테스트 추가
-- [X] T022 [P] [US2] `cmd/naeryeo/route_test.go`에 `NoTravelNeeded` 결과가 `{"noTravelNeeded": true}`로 직렬화되고 소요시간 0이 경로 실패로 오인되지 않는지 테스트 추가
-- [X] T023 [P] [US2] `cmd/naeryeo/mcp_test.go`(또는 `route_test.go`)에 동일한 `core.RouteResult`로부터 CLI `--json` 출력과 MCP `StructuredContent`가 **동일한 JSON 문서**를 내는지 검증하는 테스트 추가 (FR-010, SC-005)
+- [X] T021 [P] [US2] `cmd/naeryeo/routejson_test.go`에 `--json` 성공 시 stdout에 성공 문서 하나 + exit 0 + `error` 키 부재를 검증하는 테스트 추가
+- [X] T022 [P] [US2] `cmd/naeryeo/routejson_test.go`에 `NoTravelNeeded` 결과가 `{"noTravelNeeded": true}`로 직렬화되고 소요시간 0이 경로 실패로 오인되지 않는지 테스트 추가
+- [X] T023 [P] [US2] `cmd/naeryeo/routejson_test.go`에 동일한 `core.RouteResult`로부터 CLI `--json` 출력과 MCP `StructuredContent`가 **동일한 JSON 문서**를 내는지 검증하는 테스트 추가 (FR-010, SC-005)
   > **구현 중 조정**: "바이트 동일"로 처음 작성했더니 실패했다. MCP `StructuredContent`는 클라이언트에서 map으로 디코드되어 재직렬화 시 키가 알파벳순으로 정렬되는 반면 CLI는 구조체 필드 순서를 유지한다. 키 순서는 계약이 아니고 키 집합과 값이 계약이므로, 디코드 후 `reflect.DeepEqual`로 비교하도록 고쳤다.
 
 ### Implementation for User Story 2
@@ -133,7 +134,7 @@ MCP 두 진입점 모두에 적용한다.
 
 - [X] T026 [P] [US3] `cmd/naeryeo/errcode_test.go`에 **wrapped 에러** (`fmt.Errorf("%w: internal db timeout at shard 7 (trace 0xdeadbeef)", &core.ErrUpstreamRejected{...})`)를 넘겨도 `Message`/`Hint`에 원문 조각이 나타나지 않는지 검증하는 테스트 추가 (FR-005, SC-003)
 - [X] T027 [P] [US3] `cmd/naeryeo/errcode_test.go`에 키체인 조회 실패(`config.ErrNotConfigured`가 **아닌** 에러)가 `credential_store_error`로 분류되고 저장소 원본 문자열이 새지 않는지 테스트 추가
-- [X] T028 [P] [US3] `cmd/naeryeo/errcode_test.go`에 `go/parser`+`go/ast`로 `internal/core/*.go`의 exported 에러 심볼(`var ErrXxx = errors.New(...)`, 포인터 리시버 `Error()`를 갖는 `type ErrXxx struct`)을 수집해, 테스트 로컬 대조표에 항목이 있고 각 샘플 값이 `internal_error`가 **아닌** 코드로 분류되는지 검사하는 게이트 추가. `core.ErrGeocoderNotFound`는 "표현 계층 미도달" 사유 주석과 함께 허용 목록에 등록 ([research.md](./research.md) §R3)
+- [X] T028 [P] [US3] `cmd/naeryeo/errcode_exhaustive_test.go`(신규)에 `go/parser`+`go/ast`로 `internal/core/*.go`의 exported 에러 심볼(`var ErrXxx = errors.New(...)`, 포인터 리시버 `Error()`를 갖는 `type ErrXxx struct`)을 수집해, 테스트 로컬 대조표에 항목이 있고 각 샘플 값이 `internal_error`가 **아닌** 코드로 분류되는지 검사하는 게이트 추가. `core.ErrGeocoderNotFound`는 "표현 계층 미도달" 사유 주석과 함께 허용 목록에 등록 ([research.md](./research.md) §R3)
 
 ### Implementation for User Story 3
 

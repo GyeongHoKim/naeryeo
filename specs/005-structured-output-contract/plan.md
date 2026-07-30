@@ -104,23 +104,26 @@ specs/005-structured-output-contract/
 
 ```text
 cmd/naeryeo/
-├── errcode.go           # 신규: ErrorCode 상수 14종, failure 타입,
-│                        #       classifyRouteError(), failure.Prose()/toRouteError()
-├── errcode_test.go      # 신규: 코드별 테이블 테스트 + go/ast 망라성 게이트
-│                        #       + wrapped 에러 미노출 검증
-├── route.go             # 변경: --json 플래그, 출력 분기(프로즈/JSON),
-│                        #       routeErrorMessage를 classifyRouteError 위로 재구성,
-│                        #       인자 검증 실패의 JSON 경로 (FR-015)
-├── route_test.go        # 변경: --json 성공/실패, 스트림·exit 검증,
-│                        #       337-341 "upstream unavailable" 케이스 기대값 수정
-│                        #       (bare sentinel → wrapped 에러로 실제 누출 검증),
-│                        #       deadUpstreamFindRoute(179-213) 문구 정합성 확인
-├── mcp.go               # 변경: RouteToolOutput에 Error 필드, RouteError 타입,
-│                        #       핸들러 실패 경로를 err==nil + IsError 방식으로 전환,
-│                        #       키체인 에러를 credential_store_error로 분류
-├── mcp_test.go          # 변경: structuredContent.error.code 존재 검증,
-│                        #       GeocoderMessagesMatchCLI를 코드까지 비교하도록 확장
-└── main.go              # 변경: hasJSONFlag 선스캔 (hasDebugFlag와 같은 패턴, R4)
+├── errcode.go                  # 신규: errorCode 상수, failure 타입,
+│                               #       classifyRouteError(), Prose()/toRouteError()
+├── errcode_test.go             # 신규: 코드별 테이블 테스트 + 문구 패리티
+│                               #       + wrapped 에러 미노출 검증
+├── errcode_exhaustive_test.go  # 신규: go/ast 망라성 게이트
+├── route.go                    # 변경: --json 플래그, 출력 분기(프로즈/JSON),
+│                               #       routeErrorMessage를 classifyRouteError 위로 재구성,
+│                               #       인자 검증 실패의 JSON 경로 (FR-015)
+├── routejson_test.go           # 신규: --json 성공/실패, 스트림·exit,
+│                               #       인자 검증, --debug 조합, CLI↔MCP 성공 동일성
+├── route_test.go               # 변경: 337-341 "upstream unavailable" 기대값 수정
+│                               #       (bare sentinel → wrapped 에러로 실제 누출 검증),
+│                               #       credential_store_error 분류 테스트 추가
+├── mcp.go                      # 변경: RouteToolOutput에 Error 필드, RouteError 타입,
+│                               #       실패 경로를 err==nil + IsError 방식으로 전환,
+│                               #       키체인 에러를 credential_store_error로 분류
+├── mcpjson_test.go             # 신규: structuredContent.error.code 종단 검증,
+│                               #       CLI와 코드·문구 일치 비교
+├── mcp_test.go                 # 변경 없음 (기존 프로즈 테스트가 그대로 통과)
+└── main.go                     # 변경: hasJSONFlag 선스캔 (hasDebugFlag와 같은 패턴, R4)
 
 skills/naeryeo/SKILL.md  # 변경: --json을 1순위 호출로, 에러 산문 → 코드 표
                          #       (contracts/skill-md.md)
