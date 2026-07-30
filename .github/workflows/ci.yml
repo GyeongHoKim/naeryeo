@@ -6,9 +6,33 @@ on:
   pull_request:
     branches: [main]
 
+# The 3-OS matrix triples the runner cost of every push, so supersede in-flight
+# runs for the same ref. PR refs (refs/pull/N/merge) and main (refs/heads/main)
+# are distinct groups, so merging never cancels a PR's run. Cancelling a main
+# run is safe: release.yml re-runs `just check` itself before it publishes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Narrower than the repo's default token scope, not wider — this job only reads
+# the tree. release.yml declares its own and is unaffected; permissions do not
+# inherit across workflow files.
+permissions:
+  contents: read
+
 jobs:
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      # Report all three OSes independently. A Linux failure must not cancel
+      # macOS/Windows: this matrix exists to surface the *cause* of an
+      # OS-specific break, and a cancelled job yields no cause.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Windows minutes bill at 2x and `go test -race` is slower there; cap a hang
+    # well below the 360-minute default.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -19,5 +43,25 @@ jobs:
           install: true
           cache: true
 
+      # No `shell:` override in this job. The GitHub defaults (bash on
+      # ubuntu/macos, pwsh on windows) both propagate a native command's
+      # non-zero exit code, and the justfile pins its own recipe shell via
+      # `set windows-shell`.
       - name: Run quality gates
         run: just check
+
+      # `just check` begins with `golangci-lint fmt`, which rewrites files in
+      # place rather than reporting — so `just check` alone can never fail on
+      # formatting. This step is the actual formatting gate.
+      #
+      # It must stay a SEPARATE step rather than extra lines appended above:
+      # under pwsh, $ErrorActionPreference='Stop' does not abort on a native
+      # command's failure, and the GitHub wrapper only inspects the final
+      # $LASTEXITCODE. A two-line block would silently swallow a failing
+      # `just check` on windows-latest.
+      #
+      # `git diff` rather than `git status --porcelain` is also deliberate: it
+      # inspects tracked files only, so toolchain scratch files cannot
+      # false-positive.
+      - name: Fail if the formatter rewrote anything
+        run: git diff --exit-code
