@@ -1,0 +1,20 @@
+# Normalize every text file to LF in the index and in the working tree on all
+# platforms. This is load-bearing for CI: the `git diff --exit-code` step in
+# .github/workflows/ci.yml must be a byte comparison, and the GitHub Windows
+# runner sets core.autocrlf=true globally.
+#
+#   text=auto (index side)    -- keeps a CRLF blob from ever being committed. A
+#                                CRLF entry in the index would false-positive
+#                                that diff step on every Windows run, forever.
+#   eol=lf    (worktree side) -- overrides core.autocrlf so gofmt's LF output
+#                                matches what was checked out, instead of
+#                                rewriting every .go file on each Windows run.
+#
+# Safe to introduce here: `git ls-files --eol` reports i/lf for every tracked
+# text file, so `git add --renormalize .` is a no-op and no existing checkout
+# sees a one-time renormalization diff.
+* text=auto eol=lf
+
+# The only tracked binary. text=auto would already exclude it via git's NUL-byte
+# heuristic; stating it explicitly removes that dependency.
+*.png binary
