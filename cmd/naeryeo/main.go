@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/GyeongHoKim/naeryeo/internal/config"
@@ -76,14 +77,35 @@ func hasJSONFlag(args []string) bool {
 	return hasFlagNamed(args, "json")
 }
 
-// hasFlagNamed reports whether --name or -name appears anywhere in args.
+// hasFlagNamed reports whether the boolean flag name is enabled anywhere in
+// args, accepting every form the flag package does: --name, -name, and
+// --name=value / -name=value.
+//
+// The =value forms matter because this scan runs before flag.Parse and is the
+// only thing consulted for --json; matching only the bare form would silently
+// ignore --json=true and fall back to prose. A later occurrence wins, mirroring
+// flag's own last-one-wins behavior. An unparseable value (--json=, --json=x)
+// counts as enabled: flag.Parse will reject it, and reporting that rejection in
+// the format the caller asked for beats falling back to prose.
 func hasFlagNamed(args []string, name string) bool {
+	found := false
 	for _, a := range args {
-		if a == "--"+name || a == "-"+name {
-			return true
+		var value string
+		switch {
+		case a == "--"+name, a == "-"+name:
+			found = true
+			continue
+		case strings.HasPrefix(a, "--"+name+"="):
+			value = strings.TrimPrefix(a, "--"+name+"=")
+		case strings.HasPrefix(a, "-"+name+"="):
+			value = strings.TrimPrefix(a, "-"+name+"=")
+		default:
+			continue
 		}
+		enabled, err := strconv.ParseBool(value)
+		found = err != nil || enabled
 	}
-	return false
+	return found
 }
 
 // parseLogLevel parses NAERYEO_LOG_LEVEL, defaulting to Info.

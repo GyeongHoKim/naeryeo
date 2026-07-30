@@ -145,3 +145,48 @@ func TestHasDebugFlag(t *testing.T) {
 		})
 	}
 }
+
+// TestHasFlagNamed_ValueForms covers the -name=value forms. These matter for
+// --json in particular: the prescan is the only thing runRoute consults, so a
+// missed form silently downgrades machine output to prose.
+func TestHasFlagNamed_ValueForms(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "bare long", args: []string{"--json"}, want: true},
+		{name: "bare short", args: []string{"-json"}, want: true},
+		{name: "explicit true", args: []string{"--json=true"}, want: true},
+		{name: "explicit 1", args: []string{"--json=1"}, want: true},
+		{name: "explicit false", args: []string{"--json=false"}, want: false},
+		{name: "explicit 0", args: []string{"--json=0"}, want: false},
+		{name: "short explicit false", args: []string{"-json=false"}, want: false},
+		// flag.Parse rejects these; reporting that rejection as JSON is more
+		// useful to a caller who clearly asked for it than falling back to prose.
+		{name: "empty value", args: []string{"--json="}, want: true},
+		{name: "garbage value", args: []string{"--json=maybe"}, want: true},
+		// Last occurrence wins, as in the flag package.
+		{name: "false then bare", args: []string{"--json=false", "--json"}, want: true},
+		{name: "bare then false", args: []string{"--json", "--json=false"}, want: false},
+		// Must not match a different flag that merely shares a prefix.
+		{name: "unrelated prefix", args: []string{"--jsonify"}, want: false},
+		{name: "absent", args: []string{"--from", "강남역"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasJSONFlag(tt.args); got != tt.want {
+				t.Errorf("hasJSONFlag(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+			// The same helper backs --debug, so the forms must behave identically.
+			debugArgs := make([]string, len(tt.args))
+			for i, a := range tt.args {
+				debugArgs[i] = strings.ReplaceAll(a, "json", "debug")
+			}
+			if got := hasDebugFlag(debugArgs); got != tt.want {
+				t.Errorf("hasDebugFlag(%v) = %v, want %v", debugArgs, got, tt.want)
+			}
+		})
+	}
+}
