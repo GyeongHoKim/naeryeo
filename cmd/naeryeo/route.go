@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,15 +24,32 @@ func runRoute(
 	loadGeocoder func() (string, error),
 	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
 ) int {
+	// Whether the caller wants JSON has to be known before Parse runs: a parse
+	// failure is itself a result --json must report as a document, and Parse
+	// writes usage text to the FlagSet's output on its way to returning the
+	// error. Scanning args up front (as main.go already does for --debug) is
+	// what lets that output be suppressed in time.
+	jsonOut := hasJSONFlag(args)
+
 	fs := flag.NewFlagSet("route", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	if jsonOut {
+		// stdout must hold exactly one JSON document and nothing else; usage
+		// text on stderr would not corrupt it, but it would leave the caller
+		// with noise it did not ask for in a mode that promises machine output.
+		fs.SetOutput(io.Discard)
+	}
 	from := fs.String("from", "", "출발지 (역/정류장 이름 또는 주소)")
 	to := fs.String("to", "", "도착지 (역/정류장 이름 또는 주소)")
 	debug := fs.Bool("debug", false, "실패 시 원본 HTTP 상태·에러 체인을 함께 출력합니다")
+	fs.Bool("json", false, "결과를 JSON 문서 하나로 출력합니다 (성공·실패 모두 표준 출력)")
 	if err := fs.Parse(args); err != nil {
-		return 1
+		return reportInvalidArguments(stdout, stderr, jsonOut, "명령 인자를 해석할 수 없습니다")
 	}
 	if *from == "" || *to == "" {
+		if jsonOut {
+			return reportInvalidArguments(stdout, stderr, jsonOut, "--from과 --to를 모두 입력해야 합니다")
+		}
 		if _, err := fmt.Fprintln(stderr, "naeryeo route: --from과 --to를 모두 입력해야 합니다"); err != nil {
 			return 1
 		}
@@ -40,28 +58,91 @@ func runRoute(
 
 	apiKey, loadErr := load()
 	if errors.Is(loadErr, config.ErrNotConfigured) {
-		if _, err := fmt.Fprintln(stderr, "naeryeo route: API 키가 설정되지 않았습니다. naeryeo setup을 먼저 실행하세요"); err != nil {
-			return 1
-		}
-		return 1
+		return reportRouteFailure(stdout, stderr, jsonOut, loadErr, geocoderConfigured(loadGeocoder), *debug)
 	}
 	if loadErr != nil {
-		if _, err := fmt.Fprintf(stderr, "naeryeo route: API 키 조회 실패: %v\n", loadErr); err != nil {
-			return 1
-		}
-		return 1
+		return reportFailure(stdout, stderr, jsonOut, credentialStoreFailure())
 	}
 
 	result, err := findRoute(context.Background(), apiKey, *from, *to)
 	if err != nil {
-		code, writeErr := reportRouteError(stderr, err, geocoderConfigured(loadGeocoder), *debug)
+		return reportRouteFailure(stdout, stderr, jsonOut, err, geocoderConfigured(loadGeocoder), *debug)
+	}
+
+	if jsonOut {
+		return writeJSONDocument(stdout, toRouteToolOutput(result))
+	}
+	return printRouteResult(stdout, *from, *to, result)
+}
+
+// writeJSONDocument emits out as the single document --json promises on stdout
+// and returns the exit code that matches it: 1 when the envelope carries an
+// error, 0 otherwise. Success and failure share the stream on purpose — a
+// caller that captures only stdout (or pipes it) must not end up with an empty
+// buffer and a bare exit code as its entire explanation (spec 005 FR-008).
+func writeJSONDocument(stdout io.Writer, out RouteToolOutput) int {
+	enc := json.NewEncoder(stdout)
+	if err := enc.Encode(out); err != nil {
+		return 1
+	}
+	if out.Error != nil {
+		return 1
+	}
+	return 0
+}
+
+// reportFailure renders an already-classified failure in whichever mode is
+// active, and always exits 1.
+//
+// The two modes use different streams on purpose: prose failures stay on stderr
+// where they have always been, while the JSON document goes to stdout so a
+// caller capturing only stdout still receives the reason (spec 005 FR-008).
+func reportFailure(stdout, stderr io.Writer, jsonOut bool, f failure) int {
+	if jsonOut {
+		return writeJSONDocument(stdout, RouteToolOutput{Error: f.toRouteError()})
+	}
+	if _, err := fmt.Fprintln(stderr, "naeryeo route: "+f.Prose()); err != nil {
+		return 1
+	}
+	return 1
+}
+
+// reportInvalidArguments reports a malformed invocation. In JSON mode it takes
+// the same document shape as any other failure so a caller does not need a
+// second parser for its own mistakes (spec 005 FR-015); in prose mode the
+// caller has already written its own message and this only supplies the code.
+func reportInvalidArguments(stdout, stderr io.Writer, jsonOut bool, message string) int {
+	if !jsonOut {
+		return 1
+	}
+	return reportFailure(stdout, stderr, jsonOut, failure{
+		Code:    codeInvalidArguments,
+		Message: message,
+	})
+}
+
+// reportRouteFailure classifies a failed search and renders it.
+//
+// --debug's raw chain always goes to stderr — in JSON mode that keeps it from
+// corrupting the document, and it is where the rest of the diagnostics
+// (NAERYEO_LOG_LEVEL, the slog handler) already write (spec 005 FR-014).
+func reportRouteFailure(stdout, stderr io.Writer, jsonOut bool, err error, geocoderConfigured, debug bool) int {
+	if !jsonOut {
+		// Prose keeps going through reportRouteError so its exact framing —
+		// message and [debug] chain on a single Fprintln — is untouched.
+		code, writeErr := reportRouteError(stderr, err, geocoderConfigured, debug)
 		if writeErr != nil {
 			return 1
 		}
 		return code
 	}
 
-	return printRouteResult(stdout, *from, *to, result)
+	if debug {
+		if _, writeErr := fmt.Fprintf(stderr, "[debug] %v\n", err); writeErr != nil {
+			return 1
+		}
+	}
+	return reportFailure(stdout, stderr, jsonOut, classifyRouteError(err, geocoderConfigured))
 }
 
 // geocoderConfigured reports whether a place-search key is stored. runRoute
@@ -99,43 +180,13 @@ func reportRouteError(stderr io.Writer, err error, geocoderConfigured, debug boo
 // geocoderConfigured tells this function whether a place-search key is
 // stored, so the "point not found" case can append the FR-007 hint only when
 // setting up a geocoder would actually help (spec 004).
+//
+// Since spec 005 the classification itself lives in classifyRouteError, which
+// also carries a stable error code and keeps the reason and the suggested
+// action in separate fields. This function is the prose projection of that
+// value and stays as the entry point for the callers that only need text.
 func routeErrorMessage(err error, geocoderConfigured bool) string {
-	var pointErr *core.ErrPointNotFound
-	var rejErr *core.ErrGeocoderRejected
-	switch {
-	case errors.Is(err, core.ErrAPIKeyMissing):
-		return "API 키가 설정되지 않았습니다. naeryeo setup을 먼저 실행하세요"
-	case errors.Is(err, core.ErrAuthFailed):
-		return "저장된 API 키가 유효하지 않습니다. naeryeo setup으로 다시 등록하세요"
-	case errors.Is(err, core.ErrGeocoderAuthFailed):
-		return "장소 검색 키가 유효하지 않습니다. naeryeo setup --geocoder로 다시 등록하세요"
-	case errors.Is(err, core.ErrGeocoderForbidden):
-		return "장소 검색 서비스(Kakao) 권한이 거부되었습니다. Kakao 개발자 콘솔에서 해당 앱의 카카오맵(로컬) 서비스를 활성화했는지, 키의 도메인·IP 제한 설정을 확인하세요"
-	case errors.As(err, &pointErr):
-		msg := fmt.Sprintf("%s을(를) 찾을 수 없습니다: %q", sideLabel(pointErr.Side), pointErr.Name)
-		if !geocoderConfigured {
-			msg += "\n건물명·주소로 찾으려면 naeryeo setup --geocoder로 장소 검색 키를 설정하세요"
-		}
-		return msg
-	case errors.Is(err, core.ErrNoRoute):
-		return "두 지점 사이에 대중교통 경로가 없습니다"
-	case errors.As(err, &rejErr):
-		// A geocoder 4xx means the place-search request itself was refused.
-		// This message is shared with the MCP tool result (mcp.go), so its
-		// audience is an AI caller: give it an actionable next step and never
-		// leak the HTTP status/code/body (those go to the logs). A transient
-		// call-frequency limit is not the caller's input fault, so tell it to
-		// retry; anything else means the location could not be resolved, so
-		// tell it to reformulate.
-		if rejErr.RateLimited() {
-			return "장소 검색 요청이 일시적으로 제한되었습니다. 잠시 후 다시 시도하세요"
-		}
-		return "입력하신 위치를 인식하지 못했습니다. 더 구체적인 주소(도로명·지번)나 인근 지하철역·정류장 이름으로 다시 시도하세요"
-	case errors.Is(err, core.ErrGeocoderUnavailable):
-		return "장소 검색 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요"
-	default:
-		return fmt.Sprintf("경로 검색 중 오류가 발생했습니다: %v", err)
-	}
+	return classifyRouteError(err, geocoderConfigured).Prose()
 }
 
 // withThousandsSeparator formats n with comma thousands separators, e.g.

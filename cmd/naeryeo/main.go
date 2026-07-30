@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/GyeongHoKim/naeryeo/internal/config"
@@ -64,12 +65,54 @@ func isMCPCommand(args []string) bool {
 // is built up front in main; the route subcommand also registers --debug in
 // its own FlagSet so the flag parses cleanly and appears in its usage.
 func hasDebugFlag(args []string) bool {
+	return hasFlagNamed(args, "debug")
+}
+
+// hasJSONFlag reports whether --json (or -json) appears anywhere in args. Like
+// hasDebugFlag it has to be answered BEFORE the subcommand's FlagSet parses,
+// because a parse failure is itself something --json must report as a JSON
+// document — by the time flag.Parse returns an error it has already written
+// usage text to its output (spec 005 FR-015, research.md R4).
+func hasJSONFlag(args []string) bool {
+	return hasFlagNamed(args, "json")
+}
+
+// hasFlagNamed reports whether the boolean flag name is enabled anywhere in
+// args, accepting every form the flag package does: --name, -name, and
+// --name=value / -name=value.
+//
+// The =value forms matter because this scan runs before flag.Parse and is the
+// only thing consulted for --json; matching only the bare form would silently
+// ignore --json=true and fall back to prose. Among valid values a later
+// occurrence wins, mirroring flag's own last-one-wins behavior.
+//
+// An unparseable value (--json=, --json=x) returns immediately rather than
+// letting a later token overrule it: flag.Parse aborts on the first malformed
+// value, so nothing after it can change the outcome — the command is going to
+// fail, and reporting that failure in the format the caller asked for beats
+// falling back to prose.
+func hasFlagNamed(args []string, name string) bool {
+	found := false
 	for _, a := range args {
-		if a == "--debug" || a == "-debug" {
+		var value string
+		switch {
+		case a == "--"+name, a == "-"+name:
+			found = true
+			continue
+		case strings.HasPrefix(a, "--"+name+"="):
+			value = strings.TrimPrefix(a, "--"+name+"=")
+		case strings.HasPrefix(a, "-"+name+"="):
+			value = strings.TrimPrefix(a, "-"+name+"=")
+		default:
+			continue
+		}
+		enabled, err := strconv.ParseBool(value)
+		if err != nil {
 			return true
 		}
+		found = enabled
 	}
-	return false
+	return found
 }
 
 // parseLogLevel parses NAERYEO_LOG_LEVEL, defaulting to Info.
