@@ -166,7 +166,11 @@ func TestHasFlagNamed_ValueForms(t *testing.T) {
 		// useful to a caller who clearly asked for it than falling back to prose.
 		{name: "empty value", args: []string{"--json="}, want: true},
 		{name: "garbage value", args: []string{"--json=maybe"}, want: true},
-		// Last occurrence wins, as in the flag package.
+		// flag.Parse aborts at the malformed token, so a later valid value is
+		// never reached and must not overrule it.
+		{name: "garbage then false", args: []string{"--json=maybe", "--json=false"}, want: true},
+		{name: "false then garbage", args: []string{"--json=false", "--json=maybe"}, want: true},
+		// Among valid values the last occurrence wins, as in the flag package.
 		{name: "false then bare", args: []string{"--json=false", "--json"}, want: true},
 		{name: "bare then false", args: []string{"--json", "--json=false"}, want: false},
 		// Must not match a different flag that merely shares a prefix.

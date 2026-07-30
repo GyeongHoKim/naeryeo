@@ -83,10 +83,14 @@ func hasJSONFlag(args []string) bool {
 //
 // The =value forms matter because this scan runs before flag.Parse and is the
 // only thing consulted for --json; matching only the bare form would silently
-// ignore --json=true and fall back to prose. A later occurrence wins, mirroring
-// flag's own last-one-wins behavior. An unparseable value (--json=, --json=x)
-// counts as enabled: flag.Parse will reject it, and reporting that rejection in
-// the format the caller asked for beats falling back to prose.
+// ignore --json=true and fall back to prose. Among valid values a later
+// occurrence wins, mirroring flag's own last-one-wins behavior.
+//
+// An unparseable value (--json=, --json=x) returns immediately rather than
+// letting a later token overrule it: flag.Parse aborts on the first malformed
+// value, so nothing after it can change the outcome — the command is going to
+// fail, and reporting that failure in the format the caller asked for beats
+// falling back to prose.
 func hasFlagNamed(args []string, name string) bool {
 	found := false
 	for _, a := range args {
@@ -103,7 +107,10 @@ func hasFlagNamed(args []string, name string) bool {
 			continue
 		}
 		enabled, err := strconv.ParseBool(value)
-		found = err != nil || enabled
+		if err != nil {
+			return true
+		}
+		found = enabled
 	}
 	return found
 }
