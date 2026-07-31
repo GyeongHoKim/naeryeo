@@ -29,13 +29,11 @@ func decodeEnvelope(t *testing.T, stdout string) RouteToolOutput {
 }
 
 // failingRoute builds a findRoute that always returns err.
-func failingRoute(err error) func(context.Context, string, string, string) (core.RouteResult, error) {
-	return func(context.Context, string, string, string) (core.RouteResult, error) {
+func failingRoute(err error) func(context.Context, string, string) (core.RouteResult, error) {
+	return func(context.Context, string, string) (core.RouteResult, error) {
 		return core.RouteResult{}, err
 	}
 }
-
-func okLoad() (string, error) { return "test-key", nil }
 
 // TestRunRouteJSON_FailureGoesToStdoutWithExitOne is the core of FR-008: a
 // caller that keeps only stdout must still learn why the search failed. If the
@@ -45,7 +43,7 @@ func TestRunRouteJSON_FailureGoesToStdoutWithExitOne(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runRoute(
 		[]string{"--from", "강남역", "--to", "홍대입구역", "--json"},
-		&stdout, &stderr, okLoad, loadGeoPresent, failingRoute(core.ErrNoRoute),
+		&stdout, &stderr, staticProvider(failingRoute(core.ErrNoRoute)), geoPresent,
 	)
 
 	if code != 1 {
@@ -73,60 +71,60 @@ func TestRunRouteJSON_FailureGoesToStdoutWithExitOne(t *testing.T) {
 // must be able to tell apart without reading a single Korean sentence.
 func TestRunRouteJSON_CodesDistinguishNextAction(t *testing.T) {
 	tests := []struct {
-		name        string
-		err         error
-		geocoderKey func() (string, error)
-		wantCode    errorCode
-		wantSide    string
-		wantName    string
-		wantHint    bool
+		name               string
+		err                error
+		geocoderConfigured func() bool
+		wantCode           errorCode
+		wantSide           string
+		wantName           string
+		wantHint           bool
 	}{
 		{
-			name:        "rate limit tells the caller to retry",
-			err:         &core.ErrGeocoderRejected{Status: http.StatusTooManyRequests},
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderRateLimited,
+			name:               "rate limit tells the caller to retry",
+			err:                &core.ErrGeocoderRejected{Status: http.StatusTooManyRequests},
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderRateLimited,
 		},
 		{
-			name:        "kakao code -10 is also a rate limit",
-			err:         &core.ErrGeocoderRejected{Status: http.StatusBadRequest, Code: "-10"},
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderRateLimited,
+			name:               "kakao code -10 is also a rate limit",
+			err:                &core.ErrGeocoderRejected{Status: http.StatusBadRequest, Code: "-10"},
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderRateLimited,
 		},
 		{
-			name:        "a plain rejection tells the caller to reformulate",
-			err:         &core.ErrGeocoderRejected{Status: http.StatusBadRequest},
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderRejected,
+			name:               "a plain rejection tells the caller to reformulate",
+			err:                &core.ErrGeocoderRejected{Status: http.StatusBadRequest},
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderRejected,
 		},
 		{
-			name:        "auth failure is fixable by re-registering the key",
-			err:         core.ErrGeocoderAuthFailed,
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderAuthFailed,
+			name:               "auth failure is fixable by re-registering the key",
+			err:                core.ErrGeocoderAuthFailed,
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderAuthFailed,
 		},
 		{
-			name:        "forbidden is NOT fixable by re-registering the key",
-			err:         core.ErrGeocoderForbidden,
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderForbidden,
+			name:               "forbidden is NOT fixable by re-registering the key",
+			err:                core.ErrGeocoderForbidden,
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderForbidden,
 		},
 		{
-			name:        "point not found carries the failing side and input",
-			err:         &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"},
-			geocoderKey: loadGeoPresent,
-			wantCode:    codePointNotFound,
-			wantSide:    "from",
-			wantName:    "아이디스 타워",
+			name:               "point not found carries the failing side and input",
+			err:                &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"},
+			geocoderConfigured: geoPresent,
+			wantCode:           codePointNotFound,
+			wantSide:           "from",
+			wantName:           "아이디스 타워",
 		},
 		{
-			name:        "point not found without a geocoder adds an actionable hint",
-			err:         &core.ErrPointNotFound{Side: "to", Name: "수지구청"},
-			geocoderKey: loadGeoAbsent,
-			wantCode:    codePointNotFound,
-			wantSide:    "to",
-			wantName:    "수지구청",
-			wantHint:    true,
+			name:               "point not found without a geocoder adds an actionable hint",
+			err:                &core.ErrPointNotFound{Side: "to", Name: "수지구청"},
+			geocoderConfigured: geoAbsent,
+			wantCode:           codePointNotFound,
+			wantSide:           "to",
+			wantName:           "수지구청",
+			wantHint:           true,
 		},
 	}
 
@@ -135,7 +133,7 @@ func TestRunRouteJSON_CodesDistinguishNextAction(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := runRoute(
 				[]string{"--from", "출발", "--to", "도착", "--json"},
-				&stdout, &stderr, okLoad, tt.geocoderKey, failingRoute(tt.err),
+				&stdout, &stderr, staticProvider(failingRoute(tt.err)), tt.geocoderConfigured,
 			)
 			if code != 1 {
 				t.Fatalf("code = %d, want 1", code)
@@ -189,13 +187,13 @@ func TestRunRouteJSON_InvalidArgumentsAreStillMachineReadable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			called := false
-			findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
+			findRoute := func(context.Context, string, string) (core.RouteResult, error) {
 				called = true
 				return core.RouteResult{}, nil
 			}
 
 			var stdout, stderr bytes.Buffer
-			code := runRoute(tt.args, &stdout, &stderr, okLoad, loadGeoPresent, findRoute)
+			code := runRoute(tt.args, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 
 			if code != 1 {
 				t.Fatalf("code = %d, want 1", code)
@@ -221,7 +219,7 @@ func TestRunRouteJSON_DebugDoesNotCorruptTheDocument(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runRoute(
 		[]string{"--from", "강남역", "--to", "홍대입구역", "--json", "--debug"},
-		&stdout, &stderr, okLoad, loadGeoPresent, failingRoute(core.ErrNoRoute),
+		&stdout, &stderr, staticProvider(failingRoute(core.ErrNoRoute)), geoPresent,
 	)
 
 	if code != 1 {
@@ -240,11 +238,12 @@ func TestRunRouteJSON_DebugDoesNotCorruptTheDocument(t *testing.T) {
 // an AI caller consumes without parsing prose, and the absence of "error" as
 // the sole success signal.
 func TestRunRouteJSON_Success(t *testing.T) {
-	findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
+	findRoute := func(context.Context, string, string) (core.RouteResult, error) {
 		return core.RouteResult{
 			TotalTime:     42,
 			TransferCount: 1,
 			Fare:          1500,
+			FareKnown:     true,
 			Steps: []core.RouteStep{
 				{Description: "강남역에서 2호선 승차 → 신도림역에서 하차"},
 				{Description: "신도림역에서 경의중앙선 승차 → 홍대입구역에서 하차"},
@@ -255,7 +254,7 @@ func TestRunRouteJSON_Success(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := runRoute(
 		[]string{"--from", "강남역", "--to", "홍대입구역", "--json"},
-		&stdout, &stderr, okLoad, loadGeoPresent, findRoute,
+		&stdout, &stderr, staticProvider(findRoute), geoPresent,
 	)
 
 	if code != 0 {
@@ -265,8 +264,11 @@ func TestRunRouteJSON_Success(t *testing.T) {
 	if got.Error != nil {
 		t.Fatalf("Error = %+v, want nil on success", got.Error)
 	}
-	if got.TotalTimeMinutes != 42 || got.TransferCount != 1 || got.FareWon != 1500 {
-		t.Errorf("got %+v, want 42min / 1 transfer / 1500 won", got)
+	if got.TotalTimeMinutes != 42 || got.TransferCount != 1 {
+		t.Errorf("got %+v, want 42min / 1 transfer", got)
+	}
+	if got.FareWon == nil || *got.FareWon != 1500 {
+		t.Errorf("FareWon = %v, want a pointer to 1500", got.FareWon)
 	}
 	if len(got.Steps) != 2 || !strings.Contains(got.Steps[0], "강남역") {
 		t.Errorf("Steps = %v, want the two step descriptions in order", got.Steps)
@@ -278,28 +280,35 @@ func TestRunRouteJSON_Success(t *testing.T) {
 }
 
 // TestRunRouteJSON_ZeroValuedSuccessFieldsAreOmitted pins the presence
-// semantics of the success document. A direct route has transferCount 0 and a
-// free one fareWon 0, and omitempty drops both from the JSON — so the contract
-// is "absent numeric field means zero", not "absent means unknown".
+// semantics of the success document, which are no longer uniform across the
+// numeric fields.
 //
-// This is documented in contracts/cli-json.md and SKILL.md rather than fixed by
-// dropping omitempty: the envelope is one type, so emitting zero values on
-// success would also stamp "totalTimeMinutes":0,"transferCount":0,"fareWon":0
-// onto every failure document.
+// transferCount keeps the original rule — it is a plain int with omitempty, so
+// an absent field means zero. Emitting zeros on success is still not an option:
+// the envelope is one type, so it would stamp "totalTimeMinutes":0 onto every
+// failure document too.
+//
+// fareWon is different since spec 006 FR-010. It is a *int, so absence means
+// "the provider gave no fare information" and a present 0 means "this trip is
+// free". Collapsing those two into one absent field is exactly the ambiguity a
+// self-hosted engine without fare data would otherwise land in — it would be
+// reported as free. See TestRunRouteJSON_KnownZeroFareIsEmitted below for the
+// other half of this contract.
 func TestRunRouteJSON_ZeroValuedSuccessFieldsAreOmitted(t *testing.T) {
-	findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
+	findRoute := func(context.Context, string, string) (core.RouteResult, error) {
 		return core.RouteResult{
 			TotalTime:     18,
 			TransferCount: 0,
-			Fare:          0,
-			Steps:         []core.RouteStep{{Description: "강남역에서 2호선 승차 → 역삼역에서 하차"}},
+			// FareKnown is deliberately false: this fixture is a provider that
+			// supplied no fare at all.
+			Steps: []core.RouteStep{{Description: "강남역에서 2호선 승차 → 역삼역에서 하차"}},
 		}, nil
 	}
 
 	var stdout, stderr bytes.Buffer
 	if code := runRoute(
 		[]string{"--from", "강남역", "--to", "역삼역", "--json"},
-		&stdout, &stderr, okLoad, loadGeoPresent, findRoute,
+		&stdout, &stderr, staticProvider(findRoute), geoPresent,
 	); code != 0 {
 		t.Fatalf("code = %d, want 0", code)
 	}
@@ -307,18 +316,52 @@ func TestRunRouteJSON_ZeroValuedSuccessFieldsAreOmitted(t *testing.T) {
 	raw := stdout.String()
 	for _, absent := range []string{`"transferCount"`, `"fareWon"`} {
 		if strings.Contains(raw, absent) {
-			t.Errorf("expected %s to be omitted for a zero value, got: %s", absent, raw)
+			t.Errorf("expected %s to be omitted, got: %s", absent, raw)
 		}
 	}
 
-	// The documented consequence: decoding still yields 0, so a caller that
-	// unmarshals into a struct (rather than probing key presence) is correct.
 	got := decodeEnvelope(t, raw)
-	if got.TransferCount != 0 || got.FareWon != 0 {
-		t.Errorf("decoded transferCount/fareWon = %d/%d, want 0/0", got.TransferCount, got.FareWon)
+	if got.TransferCount != 0 {
+		t.Errorf("decoded transferCount = %d, want 0", got.TransferCount)
+	}
+	if got.FareWon != nil {
+		t.Errorf("decoded fareWon = %d, want nil — an absent fare is unknown, not free", *got.FareWon)
 	}
 	if got.TotalTimeMinutes != 18 {
 		t.Errorf("TotalTimeMinutes = %d, want 18", got.TotalTimeMinutes)
+	}
+}
+
+// TestRunRouteJSON_KnownZeroFareIsEmitted is the counterpart: when a provider
+// does report a fare and that fare happens to be zero, the field is present
+// with value 0 rather than dropping out. ODsay always reports a fare, so this
+// is the shape every ODsay result takes.
+func TestRunRouteJSON_KnownZeroFareIsEmitted(t *testing.T) {
+	findRoute := func(context.Context, string, string) (core.RouteResult, error) {
+		return core.RouteResult{
+			TotalTime: 18,
+			Fare:      0,
+			FareKnown: true,
+			Steps:     []core.RouteStep{{Description: "강남역에서 2호선 승차 → 역삼역에서 하차"}},
+		}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := runRoute(
+		[]string{"--from", "강남역", "--to", "역삼역", "--json"},
+		&stdout, &stderr, staticProvider(findRoute), geoPresent,
+	); code != 0 {
+		t.Fatalf("code = %d, want 0", code)
+	}
+
+	raw := stdout.String()
+	if !strings.Contains(raw, `"fareWon":0`) {
+		t.Errorf("expected a known zero fare to be emitted as \"fareWon\":0, got: %s", raw)
+	}
+
+	got := decodeEnvelope(t, raw)
+	if got.FareWon == nil || *got.FareWon != 0 {
+		t.Errorf("decoded fareWon = %v, want a pointer to 0", got.FareWon)
 	}
 }
 
@@ -326,14 +369,14 @@ func TestRunRouteJSON_ZeroValuedSuccessFieldsAreOmitted(t *testing.T) {
 // as "the search returned nothing": a zero duration alone is ambiguous, the
 // explicit flag is not.
 func TestRunRouteJSON_NoTravelNeeded(t *testing.T) {
-	findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
+	findRoute := func(context.Context, string, string) (core.RouteResult, error) {
 		return core.RouteResult{NoTravelNeeded: true}, nil
 	}
 
 	var stdout, stderr bytes.Buffer
 	code := runRoute(
 		[]string{"--from", "강남역", "--to", "강남역 2번 출구", "--json"},
-		&stdout, &stderr, okLoad, loadGeoPresent, findRoute,
+		&stdout, &stderr, staticProvider(findRoute), geoPresent,
 	)
 
 	if code != 0 {
@@ -363,25 +406,26 @@ func TestRunRouteJSON_SuccessMatchesMCP(t *testing.T) {
 			TotalTime:     42,
 			TransferCount: 1,
 			Fare:          1500,
+			FareKnown:     true,
 			Steps:         []core.RouteStep{{Description: "강남역에서 2호선 승차"}},
 		},
 		{NoTravelNeeded: true},
 	}
 
 	for i, result := range results {
-		findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
+		findRoute := func(context.Context, string, string) (core.RouteResult, error) {
 			return result, nil
 		}
 
 		var stdout, stderr bytes.Buffer
 		if code := runRoute(
 			[]string{"--from", "출발", "--to", "도착", "--json"},
-			&stdout, &stderr, okLoad, loadGeoPresent, findRoute,
+			&stdout, &stderr, staticProvider(findRoute), geoPresent,
 		); code != 0 {
 			t.Fatalf("result %d: CLI code = %d, want 0", i, code)
 		}
 
-		server := buildMCPServer("test", discardLogger, okLoad, loadGeoPresent, findRoute)
+		server := buildMCPServer("test", discardLogger, staticProvider(findRoute), geoPresent)
 		session := connectTestClient(t, server)
 		res := callFindTransitRoute(t, session, "출발", "도착")
 
@@ -411,7 +455,7 @@ func TestRunRoute_ProseModeUnchangedByJSONSupport(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		code := runRoute(
 			[]string{"--from", "강남역", "--to", "홍대입구역"},
-			&stdout, &stderr, okLoad, loadGeoPresent, failingRoute(core.ErrNoRoute),
+			&stdout, &stderr, staticProvider(failingRoute(core.ErrNoRoute)), geoPresent,
 		)
 		if code != 1 {
 			t.Fatalf("code = %d, want 1", code)
@@ -428,10 +472,9 @@ func TestRunRoute_ProseModeUnchangedByJSONSupport(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		runRoute(
 			[]string{"--from", "강남역", "--to", "홍대입구역"},
-			&stdout, &stderr, okLoad, loadGeoPresent,
-			func(context.Context, string, string, string) (core.RouteResult, error) {
-				return core.RouteResult{TotalTime: 42, TransferCount: 1, Fare: 1500}, nil
-			},
+			&stdout, &stderr, staticProvider(func(context.Context, string, string) (core.RouteResult, error) {
+				return core.RouteResult{TotalTime: 42, TransferCount: 1, Fare: 1500, FareKnown: true}, nil
+			}), geoPresent,
 		)
 		var probe any
 		if err := json.Unmarshal(stdout.Bytes(), &probe); err == nil {

@@ -194,3 +194,35 @@ func TestHasFlagNamed_ValueForms(t *testing.T) {
 		})
 	}
 }
+
+// TestLogoutCommandIsGone pins the breaking change: the delete-only command
+// was folded into setup, so invoking it must fail loudly rather than silently
+// doing nothing, and the usage line must not advertise it (spec 006 FR-035).
+func TestLogoutCommandIsGone(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"logout"}, &stdout, &stderr, discardLogger)
+
+	if code == 0 {
+		t.Fatal("code = 0, want non-zero for a removed command")
+	}
+	if !strings.Contains(stderr.String(), "unknown command") {
+		t.Errorf("stderr = %q, want an unknown-command error", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "logout|") || strings.Contains(stderr.String(), "|logout") {
+		t.Errorf("usage still advertises logout:\n%s", stderr.String())
+	}
+}
+
+func TestUsageListsTheCurrentCommands(t *testing.T) {
+	var usage bytes.Buffer
+	printUsage(&usage)
+
+	if strings.Contains(usage.String(), "logout") {
+		t.Errorf("usage mentions the removed logout command: %q", usage.String())
+	}
+	for _, want := range []string{"setup", "route", "mcp", "--version"} {
+		if !strings.Contains(usage.String(), want) {
+			t.Errorf("usage = %q, want it to list %q", usage.String(), want)
+		}
+	}
+}

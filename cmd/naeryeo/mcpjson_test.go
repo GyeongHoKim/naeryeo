@@ -20,40 +20,40 @@ import (
 // refactor reintroduces an error return here, this test fails.
 func TestFindTransitRouteTool_FailureCarriesStructuredCode(t *testing.T) {
 	tests := []struct {
-		name        string
-		err         error
-		geocoderKey func() (string, error)
-		wantCode    errorCode
+		name               string
+		err                error
+		geocoderConfigured func() bool
+		wantCode           errorCode
 	}{
 		{
-			name:        "rate limited",
-			err:         &core.ErrGeocoderRejected{Status: http.StatusTooManyRequests},
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderRateLimited,
+			name:               "rate limited",
+			err:                &core.ErrGeocoderRejected{Status: http.StatusTooManyRequests},
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderRateLimited,
 		},
 		{
-			name:        "rejected input",
-			err:         &core.ErrGeocoderRejected{Status: http.StatusBadRequest},
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeGeocoderRejected,
+			name:               "rejected input",
+			err:                &core.ErrGeocoderRejected{Status: http.StatusBadRequest},
+			geocoderConfigured: geoPresent,
+			wantCode:           codeGeocoderRejected,
 		},
 		{
-			name:        "no route",
-			err:         core.ErrNoRoute,
-			geocoderKey: loadGeoPresent,
-			wantCode:    codeNoRoute,
+			name:               "no route",
+			err:                core.ErrNoRoute,
+			geocoderConfigured: geoPresent,
+			wantCode:           codeNoRoute,
 		},
 		{
-			name:        "point not found",
-			err:         &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"},
-			geocoderKey: loadGeoAbsent,
-			wantCode:    codePointNotFound,
+			name:               "point not found",
+			err:                &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"},
+			geocoderConfigured: geoAbsent,
+			wantCode:           codePointNotFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := buildMCPServer("test", discardLogger, okLoad, tt.geocoderKey, failingRoute(tt.err))
+			server := buildMCPServer("test", discardLogger, staticProvider(failingRoute(tt.err)), tt.geocoderConfigured)
 			session := connectTestClient(t, server)
 			res := callFindTransitRoute(t, session, "출발", "도착")
 
@@ -85,34 +85,34 @@ func TestFindTransitRouteTool_FailureCarriesStructuredCode(t *testing.T) {
 // bypassed it.
 func TestFindTransitRouteTool_FailureMatchesCLICodeAndMessage(t *testing.T) {
 	tests := []struct {
-		name        string
-		err         error
-		geocoderKey func() (string, error)
-		configured  bool
+		name               string
+		err                error
+		geocoderConfigured func() bool
+		configured         bool
 	}{
 		{
-			name:        "point not found without geocoder",
-			err:         &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"},
-			geocoderKey: loadGeoAbsent,
-			configured:  false,
+			name:               "point not found without geocoder",
+			err:                &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"},
+			geocoderConfigured: geoAbsent,
+			configured:         false,
 		},
 		{
-			name:        "point not found with geocoder",
-			err:         &core.ErrPointNotFound{Side: "to", Name: "수지구청"},
-			geocoderKey: loadGeoPresent,
-			configured:  true,
+			name:               "point not found with geocoder",
+			err:                &core.ErrPointNotFound{Side: "to", Name: "수지구청"},
+			geocoderConfigured: geoPresent,
+			configured:         true,
 		},
 		{
-			name:        "geocoder auth failure",
-			err:         core.ErrGeocoderAuthFailed,
-			geocoderKey: loadGeoPresent,
-			configured:  true,
+			name:               "geocoder auth failure",
+			err:                core.ErrGeocoderAuthFailed,
+			geocoderConfigured: geoPresent,
+			configured:         true,
 		},
 		{
-			name:        "geocoder forbidden",
-			err:         core.ErrGeocoderForbidden,
-			geocoderKey: loadGeoPresent,
-			configured:  true,
+			name:               "geocoder forbidden",
+			err:                core.ErrGeocoderForbidden,
+			geocoderConfigured: geoPresent,
+			configured:         true,
 		},
 	}
 
@@ -122,7 +122,7 @@ func TestFindTransitRouteTool_FailureMatchesCLICodeAndMessage(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			cliCode := runRoute(
 				[]string{"--from", "출발", "--to", "도착", "--json"},
-				&stdout, &stderr, okLoad, tt.geocoderKey, failingRoute(tt.err),
+				&stdout, &stderr, staticProvider(failingRoute(tt.err)), tt.geocoderConfigured,
 			)
 			if cliCode != 1 {
 				t.Fatalf("CLI code = %d, want 1", cliCode)
@@ -133,7 +133,7 @@ func TestFindTransitRouteTool_FailureMatchesCLICodeAndMessage(t *testing.T) {
 			}
 
 			// What the MCP tool produces.
-			server := buildMCPServer("test", discardLogger, okLoad, tt.geocoderKey, failingRoute(tt.err))
+			server := buildMCPServer("test", discardLogger, staticProvider(failingRoute(tt.err)), tt.geocoderConfigured)
 			session := connectTestClient(t, server)
 			res := callFindTransitRoute(t, session, "출발", "도착")
 			mcpOut := decodeRouteToolOutput(t, res)
@@ -161,10 +161,10 @@ func TestFindTransitRouteTool_FailureMatchesCLICodeAndMessage(t *testing.T) {
 // TestFindTransitRouteTool_SuccessHasNoErrorKey keeps the envelope's success
 // half clean: callers decide success by the absence of "error" alone.
 func TestFindTransitRouteTool_SuccessHasNoErrorKey(t *testing.T) {
-	findRoute := func(context.Context, string, string, string) (core.RouteResult, error) {
-		return core.RouteResult{TotalTime: 42, TransferCount: 1, Fare: 1500}, nil
+	findRoute := func(context.Context, string, string) (core.RouteResult, error) {
+		return core.RouteResult{TotalTime: 42, TransferCount: 1, Fare: 1500, FareKnown: true}, nil
 	}
-	server := buildMCPServer("test", discardLogger, okLoad, loadGeoPresent, findRoute)
+	server := buildMCPServer("test", discardLogger, staticProvider(findRoute), geoPresent)
 	session := connectTestClient(t, server)
 	res := callFindTransitRoute(t, session, "강남역", "홍대입구역")
 

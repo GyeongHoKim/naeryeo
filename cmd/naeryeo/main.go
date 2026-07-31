@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/GyeongHoKim/naeryeo/internal/config"
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 	"github.com/GyeongHoKim/naeryeo/internal/geocode"
+	"github.com/GyeongHoKim/naeryeo/internal/motis"
 )
 
 // version is overwritten via -ldflags at build time (see .goreleaser.yml).
@@ -140,21 +142,22 @@ func run(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	config.SetLogger(logger)
 	logger.Info("naeryeo: dispatch", "command", args[0])
 
-	loadODsay := func() (string, error) { return config.Load(config.ODsayAPIKey) }
-	loadGeocoder := func() (string, error) { return config.Load(config.GeocoderAPIKey) }
-
 	switch args[0] {
 	case "setup":
-		return runSetup(args[1:], os.Stdin, stdout, stderr, config.Save)
-	case "logout":
-		return runLogout(args[1:], stdout, stderr, config.Load, config.Delete)
+		return runSetup(args[1:], os.Stdin, stdout, stderr, setupDeps{
+			SaveCredential:   config.Save,
+			LoadCredential:   config.Load,
+			DeleteCredential: config.Delete,
+			SaveSettings:     config.SaveSettings,
+			ProbeMotis:       probeMotis,
+		})
 	case "route":
-		return runRoute(args[1:], stdout, stderr, loadODsay, loadGeocoder, newFindRoute(logger))
+		return runRoute(args[1:], stdout, stderr, newProviderResolver(logger), geocoderConfigured)
 	case "mcp":
 		// mcp.StdioTransport binds directly to the process's real
 		// os.Stdin/os.Stdout — the stdout passed into run() is intentionally
 		// not used here (research.md §3 of specs/003-mcp-route-server).
-		server := buildMCPServer(version, logger, loadODsay, loadGeocoder, newFindRoute(logger))
+		server := buildMCPServer(version, logger, newProviderResolver(logger), geocoderConfigured)
 		if err := runMCP(context.Background(), server); err != nil {
 			logger.Error("mcp: server exited with error", "error", err)
 			return 1
@@ -174,27 +177,112 @@ func run(args []string, stdout, stderr io.Writer, logger *slog.Logger) int {
 	}
 }
 
-// newFindRoute builds the route-search function shared by the route and mcp
-// entry points. It constructs a core.Client for the ODsay key and, if a
-// geocoder key is configured, injects a Kakao geocoder so that From/To names
-// ODsay's station search does not recognize (building names, addresses) are
-// resolved via the fallback. When no geocoder key is stored the client's
-// Geocoder stays nil and behavior is unchanged (spec 004 FR-012).
-func newFindRoute(logger *slog.Logger) func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-	return func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-		client := core.NewClient(apiKey)
-		client.Logger = logger
-		if gk, err := config.Load(config.GeocoderAPIKey); err == nil && gk != "" {
-			kakao := geocode.NewKakao(gk)
-			kakao.Logger = logger
-			client.Geocoder = kakao
+// routeFinder searches a route with the provider already chosen and its
+// credentials already resolved. Both engines' FindRoute methods have exactly
+// this shape, so each satisfies it as a method value with no adapter.
+//
+// It is a function type rather than an interface because the consumer needs
+// exactly one operation. Declaring an interface in internal/core would also
+// invert the dependency the constitution asks for — the consuming package
+// defines the abstraction, and here the consumer is this one.
+type routeFinder func(ctx context.Context, from, to string) (core.RouteResult, error)
+
+// providerResolver yields the finder for this run, or the failure that
+// prevents one from existing — no provider configured, no key stored, an
+// unreadable keychain. Resolving before the search is what lets those be
+// reported with the same coded machinery as a search failure.
+type providerResolver func() (routeFinder, *failure)
+
+// newProviderResolver reads the stored settings and builds the matching
+// client. The route and mcp entry points share one of these, which is what
+// makes it structurally impossible for the two to disagree about which engine
+// answered (spec 006 FR-002).
+//
+// A stored credential never implies a provider: with no settings file this
+// returns provider_not_configured even when an ODsay key is sitting in the
+// keychain. Inferring the provider would put a permanent exception into the
+// state model to smooth over a one-time migration (spec 006 FR-031).
+func newProviderResolver(logger *slog.Logger) providerResolver {
+	return func() (routeFinder, *failure) {
+		settings, err := config.LoadSettings()
+		if err != nil {
+			f := providerNotConfiguredFailure()
+			return nil, &f
 		}
-		return client.FindRoute(ctx, from, to)
+
+		geocoder := newGeocoder(settings, logger)
+
+		switch settings.RoutingProvider {
+		case config.ProviderMotis:
+			client := motis.NewClient(settings.MotisURL)
+			client.Logger = logger
+			client.Geocoder = geocoder
+			return client.FindRoute, nil
+
+		case config.ProviderODsay:
+			key, keyErr := config.Load(config.ODsayAPIKey)
+			switch {
+			case errors.Is(keyErr, config.ErrNotConfigured):
+				f := classifyRouteError(core.ErrAPIKeyMissing, geocoder != nil)
+				return nil, &f
+			case keyErr != nil:
+				f := credentialStoreFailure()
+				return nil, &f
+			}
+			client := core.NewClient(key)
+			client.Logger = logger
+			client.Geocoder = geocoder
+			return client.FindRoute, nil
+
+		default:
+			f := providerNotConfiguredFailure()
+			return nil, &f
+		}
 	}
 }
 
+// newGeocoder returns the optional place-search backend, or nil when none is
+// configured. It is an axis independent of the routing provider: every
+// provider/geocoder combination is valid, and a nil result simply means names
+// resolve only as far as the routing engine's own index reaches (spec 006
+// FR-030).
+func newGeocoder(settings config.Settings, logger *slog.Logger) core.Geocoder {
+	if settings.Geocoder != config.GeocoderKakao {
+		return nil
+	}
+	key, err := config.Load(config.GeocoderAPIKey)
+	if err != nil || key == "" {
+		logger.Warn("naeryeo: geocoder selected but no key stored; place search is disabled")
+		return nil
+	}
+	kakao := geocode.NewKakao(key)
+	kakao.Logger = logger
+	return kakao
+}
+
+// geocoderConfigured reports whether place search is actually usable. The
+// point_not_found hint ("set up a geocoder") is only worth showing when doing
+// so would change the outcome (spec 004 FR-007).
+func geocoderConfigured() bool {
+	settings, err := config.LoadSettings()
+	if err != nil || settings.Geocoder != config.GeocoderKakao {
+		return false
+	}
+	key, keyErr := config.Load(config.GeocoderAPIKey)
+	return keyErr == nil && key != ""
+}
+
+// probeMotis checks that a candidate MOTIS endpoint is reachable AND has data
+// loaded, so setup can refuse an address that would fail at every later
+// search. See setup.go for why this lives at configuration time rather than
+// on the search path.
+func probeMotis(ctx context.Context, baseURL string) error {
+	client := motis.NewClient(baseURL)
+	return client.Probe(ctx)
+}
+
 func printUsage(w io.Writer) {
-	if _, err := fmt.Fprintln(w, "usage: naeryeo <setup|logout|route|mcp|--version>"); err != nil {
+	if _, err := fmt.Fprintln(w, "usage: naeryeo <setup|route|mcp|--version>"); err != nil {
 		return
 	}
 }
