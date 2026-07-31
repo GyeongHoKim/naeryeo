@@ -2,8 +2,9 @@
 name: naeryeo
 description: >-
   Answer natural-language questions about South Korean public-transit routes
-  (subway, bus, inter-city bus) using the naeryeo CLI and MCP server, which wraps
-  the ODsay API. Use whenever a user asks how to get from one place in South Korea
+  (subway, bus, inter-city bus) using the naeryeo CLI and MCP server, which routes
+  via either a self-hosted MOTIS engine or the ODsay API. Use whenever a user asks
+  how to get from one place in South Korea
   to another by public transit -- by station or stop name, and by building name or
   street address when the optional place-search key is configured. Prefer this over
   answering from memory: the CLI returns live travel time, transfer count, fare, and
@@ -16,12 +17,29 @@ metadata:
 # naeryeo (내려)
 
 naeryeo is a Go CLI and MCP stdio server that answers natural-language questions
-about South Korean public-transit routes. It wraps the [ODsay API](https://lab.odsay.com)
-and returns total travel time, number of transfers, fare, and human-readable
-step-by-step directions. ODsay recognizes station and stop names only; to also
-accept building names and street addresses (e.g. "아이디스 타워"), naeryeo can
-resolve them to coordinates via the Kakao Local API when an optional place-search
-key is configured.
+about South Korean public-transit routes, returning total travel time, number of
+transfers, fare, and human-readable step-by-step directions.
+
+**It has two routing providers, and the user picks one during setup:**
+
+| Provider | What it is | Needs |
+| --- | --- | --- |
+| **MOTIS (self-hosted)** | An open-source routing engine the user runs on their own machine. No account, no API key, no per-call cost, and nothing about the query leaves their network | The user to run the engine ([self-hosting guide](https://github.com/GyeongHoKim/naeryeo/blob/main/docs/self-hosting.md)) |
+| **ODsay** | A commercial Korean transit API | An app key from <https://lab.odsay.com> |
+
+Both answer with the same document shape, so **you do not change how you call
+naeryeo based on which one is configured**.
+
+Both providers resolve station and stop names on their own. To also accept
+building names and street addresses (e.g. "아이디스 타워"), naeryeo can resolve
+them via the Kakao Local API when an optional place-search key is configured —
+that setting is independent of the routing provider.
+
+> **Never install, configure, or start a MOTIS engine on the user's behalf
+> without their explicit request.** Self-hosting means downloading gigabytes of
+> map and timetable data and running a long-lived server on their machine. If a
+> failure points at the self-hosting guide, relay the link and let the user
+> decide.
 
 ## When to use this skill
 
@@ -49,38 +67,52 @@ scoop install naeryeo
 
 Verify with `naeryeo --version`.
 
-### 2. Store the ODsay API key (one-time)
+### 2. Choose a routing provider (one-time)
 
-Routing requires an ODsay API key. If none is stored, `naeryeo` commands fail with
-a message telling the user to run setup first. Have the user obtain a key at
-<https://lab.odsay.com>, then run:
+Until a provider is chosen, every route command fails with
+`provider_not_configured`. **A stored API key does not count as a choice** — the
+user must run setup even if they used naeryeo before.
 
 ```bash
 naeryeo setup
 ```
 
-The key is stored only in the OS keychain (macOS Keychain / Windows Credential
-Manager / Linux Secret Service) — never in a plaintext file and never sent
-anywhere except ODsay. On a headless Linux host without Secret Service, `setup`
-refuses to run rather than falling back to a plaintext file.
+The wizard asks which provider to use (self-hosted MOTIS is the default), then
+for that provider's address or key, then whether to enable place search. Every
+step can also be answered up front:
 
-Run `naeryeo logout` to delete the stored key.
+```bash
+naeryeo setup --provider=motis --motis-url=http://localhost:8080
+echo "$ODSAY_KEY" | naeryeo setup --provider=odsay
+```
+
+**Secrets are only ever read from stdin, never from a flag** — a key on the
+command line lands in shell history and in every `ps` listing. There is no
+`--api-key` flag; do not look for one.
+
+Keys are stored only in the OS keychain (macOS Keychain / Windows Credential
+Manager / Linux Secret Service) — never in a plaintext file. The provider choice
+and the MOTIS address are not secrets and live in a config file instead, so a
+self-hosting user is never prompted to unlock a keychain they have nothing in.
+
+Delete stored keys with `naeryeo setup --delete=odsay|kakao|all`. (There is no
+separate logout command.)
 
 ### 3. (Optional) Store the place-search key for building/address queries
 
-Station and stop names work with just the ODsay key above. To let the user ask by
-**building name or street address**, store a Kakao REST API key as well. Have the
-user create an app and REST API key at <https://developers.kakao.com>, then run:
+Station and stop names work with either provider on their own. To let the user
+ask by **building name or street address**, store a Kakao REST API key as well.
+Have the user create an app and REST API key at <https://developers.kakao.com>,
+then run:
 
 ```bash
-naeryeo setup --geocoder
+echo "$KAKAO_KEY" | naeryeo setup --geocoder=kakao
 ```
 
-This key is stored as a **separate** OS-keychain entry from the ODsay key, with the
-same protections (keychain only, never plaintext, never sent anywhere except Kakao).
-Delete it independently with `naeryeo logout --geocoder`. Without it, station/stop
-lookups still work and building/address queries simply report that the place was
-not found.
+This key is a **separate** OS-keychain entry with the same protections. Turn it
+off with `naeryeo setup --geocoder=none`, or delete it with
+`naeryeo setup --delete=kakao`. Without it, station/stop lookups still work and
+building/address queries report that the place was not found.
 
 ## Usage
 
@@ -114,10 +146,12 @@ same thing (0 / 1), so either works.
 
 Three things about the success document:
 
-- **A missing numeric field means zero, not "unknown."** Zero-valued fields are
-  omitted, so a direct route has no `transferCount` and a free one has no
-  `fareWon`. `{"totalTimeMinutes": 18, "steps": [...]}` means 0 transfers and
-  0 won — do not report it as missing data.
+- **`transferCount` follows "absent means zero."** A direct route omits it;
+  `{"totalTimeMinutes": 18, "steps": [...]}` means 0 transfers.
+- **`fareWon` is different: absent means UNKNOWN, not free.** A self-hosted
+  engine whose timetable carries no fare data omits the field entirely, while a
+  genuinely free trip reports `"fareWon": 0`. When `fareWon` is absent, say the
+  fare is not available — never say the trip is free.
 - `noTravelNeeded: true` means the two points are effectively the same place, so
   no trip is needed. It is not a failure.
 - `steps` is already ordered; relay it in order.
@@ -148,7 +182,10 @@ questions can be answered inline without shelling out each time. Add to
 }
 ```
 
-No API key goes in this config — the server reuses the key stored by `naeryeo setup`.
+No API key goes in this config — the server reuses whatever `naeryeo setup`
+stored. The CLI and the MCP server read the same settings, so they always use
+the same provider; there is no way for one to answer from MOTIS while the other
+answers from ODsay.
 
 ## Handling errors
 
@@ -170,7 +207,8 @@ when it is present.
 
 | `code` | What to do | Retry? |
 | --- | --- | :---: |
-| `api_key_missing` | Tell the user to run `naeryeo setup` | ❌ |
+| `provider_not_configured` | No routing provider has been chosen yet. Tell the user to run `naeryeo setup` and pick one. **Do not assume ODsay just because a key exists** | ❌ |
+| `api_key_missing` | ODsay is configured but its key is missing. Tell the user to run `naeryeo setup` | ❌ |
 | `auth_failed` | The routing key was rejected — tell the user to re-run `naeryeo setup`. Some ODsay keys are IP-restricted and only work from the machine they were issued for | ❌ |
 | `geocoder_auth_failed` | The place-search key was rejected — tell the user to re-run `naeryeo setup --geocoder` | ❌ |
 | `geocoder_forbidden` | **Different from the above**: the key is valid but the Kakao app's settings deny it. Tell the user to enable the 카카오맵(로컬) service and check domain/IP restrictions in the Kakao console. Re-registering the key will NOT help | ❌ |
@@ -181,11 +219,17 @@ when it is present.
 | `geocoder_unavailable` | Place-search service unreachable | ✅ |
 | `upstream_unavailable` | Routing service unreachable | ✅ |
 | `upstream_rejected` | The routing service refused the request. Report it and suggest checking the endpoints | ❌ |
+| `motis_unavailable` | The user's **self-hosted** engine is unreachable. Retry once or twice; if it keeps failing, tell the user to check that their engine is running and pass along the `docs` link | ✅ |
+| `motis_rejected` | The self-hosted engine answered but could not serve the request — usually its timetable or map data is missing or stale. Retrying is pointless. Relay the `hint` and the `docs` link | ❌ |
 | `credential_store_error` | The OS keychain could not be read. Relay the `hint` | ❌ |
 | `invalid_arguments` | The command was malformed. Fix the invocation and retry | ❌ |
 | `internal_error` | Unexpected. Report it to the user | ❌ |
 
 If you see a code that is not in this table, relay `message` and do not retry.
+
+**When an error carries a `docs` field, give the user that URL.** It appears on
+the self-hosting failures, where the fix is in the user's own infrastructure and
+there is nothing naeryeo can do for them.
 
 The two pairs worth re-reading: `geocoder_rate_limited` vs `geocoder_rejected`
 (retry vs reformulate), and `geocoder_auth_failed` vs `geocoder_forbidden`
@@ -205,7 +249,10 @@ pointless retry loop or telling the user to redo something that cannot help.
   (that is `no_route`).
 - **Building names and addresses need the place-search key** (Prerequisites §3).
   Without it only station and stop names resolve; a building name returns
-  `point_not_found` plus a `hint` to run `naeryeo setup --geocoder`.
+  `point_not_found` plus a `hint` to run `naeryeo setup --geocoder=kakao`.
+- **Do not set up a self-hosted engine for the user.** `motis_unavailable` means
+  *their* server is down, not that you should install one. Relay the `docs` link.
+- **A missing `fareWon` is not a free trip.** See the success-document notes.
 - **`--debug` writes to stderr, never to stdout.** Combining it with `--json`
   is safe: stdout stays a single parseable document.
 - **Do not put API keys in `claude_desktop_config.json`.** The MCP server and CLI

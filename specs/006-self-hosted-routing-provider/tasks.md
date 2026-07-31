@@ -31,10 +31,10 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 **Purpose**: 신규 패키지·디렉터리의 자리를 만들고 변경 전 기준선을 확보한다
 
-- [ ] T001 브랜치 `feature/006-self-hosted-routing-provider`에서 `just check`를 실행해 변경 전 기준선이 green임을 확인하고 결과를 기록한다 (회귀 판정의 기준점)
-- [ ] T002 [P] `internal/motis/doc.go`를 생성한다 — 패키지 주석에 "MOTIS(자체 호스팅 라우팅 엔진) 어댑터. `internal/core`를 단방향 의존하며 `core.RouteResult`로 매핑한다"를 명시 (`internal/geocode/doc.go`의 서술 방식을 따를 것)
-- [ ] T003 [P] `docs/self-hosting.md`를 제목·목차만 갖춘 자리표시자로 생성한다 — Foundational 단계의 `docsURL` 상수가 이 경로를 가리켜야 하므로 **내용보다 경로 확정이 먼저**다 (plan.md §7)
-- [ ] T004 [P] `deploy/motis/README.md`를 자리표시자로 생성하고 `docs/self-hosting.md`로 연결한다
+- [X] T001 브랜치 `feature/006-self-hosted-routing-provider`에서 `just check`를 실행해 변경 전 기준선이 green임을 확인하고 결과를 기록한다 (회귀 판정의 기준점)
+- [X] T002 [P] `internal/motis/doc.go`를 생성한다 — 패키지 주석에 "MOTIS(자체 호스팅 라우팅 엔진) 어댑터. `internal/core`를 단방향 의존하며 `core.RouteResult`로 매핑한다"를 명시 (`internal/geocode/doc.go`의 서술 방식을 따를 것)
+- [X] T003 [P] `docs/self-hosting.md`를 제목·목차만 갖춘 자리표시자로 생성한다 — Foundational 단계의 `docsURL` 상수가 이 경로를 가리켜야 하므로 **내용보다 경로 확정이 먼저**다 (plan.md §7)
+- [X] T004 [P] `deploy/motis/README.md`를 자리표시자로 생성하고 `docs/self-hosting.md`로 연결한다
 
 **Checkpoint**: 신규 경로가 확정되어 Foundational 코드가 이를 참조할 수 있다
 
@@ -52,10 +52,10 @@ description: "Task list for 006-self-hosted-routing-provider"
 > Phase 3~6과 같은 TDD 순서이며, 번호 순서와 작성 순서가 다른 것은 의도적이다 — 커밋은
 > 아래 "Commit Boundaries"의 C-1 하나로 묶인다.
 
-- [ ] T005 `internal/config/settings.go`에 `Settings`, `RoutingProvider`(`ProviderUnset`/`ProviderMotis`/`ProviderODsay`), `GeocoderChoice`(`GeocoderNone`/`GeocoderKakao`) 타입과 `os.UserConfigDir()` 기반 경로 해석 함수를 정의한다 — 이 타입이 spec FR-001의 "제공자 선택"을 표현하는 값이다 (spec FR-001, data-model.md §1)
-- [ ] T006 `internal/config/settings.go`에 `LoadSettings`/`SaveSettings`를 구현한다 — 저장 시 검증(provider 허용값, `motis_url` 절대 URL·scheme·host·후행 슬래시 정규화), 로드 시 관대한 처리(파일 부재·JSON 파싱 실패·미인식 값 → `ProviderUnset`, 알 수 없는 키 무시), 디렉터리 `0700`·파일 `0600`. **키체인을 거치지 않는다** — 저장할 비밀이 없는 사용자에게 키체인 접근을 요구하지 않기 위함 (spec FR-004)
-- [ ] T007 `internal/config/settings.go`에서 JSON 파싱 실패 시 **원본 파싱 에러 문자열을 반환값에 담지 않도록** 한다 (spec FR-019 — 저장소 원문 비노출)
-- [ ] T008 [P] `internal/config/settings_test.go`에 contracts/settings-file.md의 "테스트 계약" 표 8개 항목을 테이블 주도 테스트로 작성한다 — round-trip, 파일 부재, 손상 JSON, 알 수 없는 키, 권한 0600(POSIX 한정), 후행 슬래시 정규화, 무효 URL 시 **파일 미생성**, `os.UserConfigDir()` 하위 해석
+- [X] T005 `internal/config/settings.go`에 `Settings`, `RoutingProvider`(`ProviderUnset`/`ProviderMotis`/`ProviderODsay`), `GeocoderChoice`(`GeocoderNone`/`GeocoderKakao`) 타입과 `os.UserConfigDir()` 기반 경로 해석 함수를 정의한다 — 이 타입이 spec FR-001의 "제공자 선택"을 표현하는 값이다 (spec FR-001, data-model.md §1)
+- [X] T006 `internal/config/settings.go`에 `LoadSettings`/`SaveSettings`를 구현한다 — 저장 시 검증(provider 허용값, `motis_url` 절대 URL·scheme·host·후행 슬래시 정규화), 로드 시 관대한 처리(파일 부재·JSON 파싱 실패·미인식 값 → `ProviderUnset`, 알 수 없는 키 무시), 디렉터리 `0700`·파일 `0600`. **키체인을 거치지 않는다** — 저장할 비밀이 없는 사용자에게 키체인 접근을 요구하지 않기 위함 (spec FR-004)
+- [X] T007 `internal/config/settings.go`에서 JSON 파싱 실패 시 **원본 파싱 에러 문자열을 반환값에 담지 않도록** 한다 (spec FR-019 — 저장소 원문 비노출)
+- [X] T008 [P] `internal/config/settings_test.go`에 contracts/settings-file.md의 "테스트 계약" 표 8개 항목을 테이블 주도 테스트로 작성한다 — round-trip, 파일 부재, 손상 JSON, 알 수 없는 키, 권한 0600(POSIX 한정), 후행 슬래시 정규화, 무효 URL 시 **파일 미생성**, `os.UserConfigDir()` 하위 해석
 
 ### 에러 taxonomy — 망라성 게이트를 의도적으로 깨뜨렸다가 통과시킨다
 
@@ -63,20 +63,20 @@ description: "Task list for 006-self-hosted-routing-provider"
 > 먼저 작성해도 좋다. 어느 쪽이든 커밋은 C-2 하나로 묶인다 — T010의 실패 상태를 커밋하지
 > 않는다.
 
-- [ ] T009 `internal/core/errors.go`에 `ErrMotisUnavailable`(sentinel)과 `ErrMotisRejected{Status int}`(구조체)를 추가한다 — `ErrMotisRejected`는 **Status만 보존**하고 본문·URL은 담지 않는다 (data-model.md §3)
-- [ ] T010 `just test`를 실행해 `TestErrorCodeExhaustive_EveryCoreErrorHasACode`가 **실패하는 것을 확인하고 출력을 기록한다** — 게이트가 살아 있음의 증명이며 spec FR-020·SC-004가 요구하는 검증이다. 실패를 보지 않고 다음으로 넘어가지 말 것
-- [ ] T011 `cmd/naeryeo/errcode.go`에 self-hosting 문서 URL 상수를 **한 곳에만** 정의하고 — 값과 버전 고정 방식을 여기서 확정한다. 브랜치 고정 링크는 문서가 이동하면 조용히 깨지므로 릴리스 태그 기준 링크 또는 안정 리다이렉트 중 하나를 택하고 근거를 주석에 남긴다 (spec FR-022) — `failure` 구조체에 `Docs string` 필드를, `RouteError`(`cmd/naeryeo/mcp.go`)에 `Docs string \`json:"docs,omitempty"\`` 필드를 추가한다 (contracts/error-codes.md). 완료 조건에 `specs/006-self-hosted-routing-provider/contracts/error-codes.md`의 `<self-hosting 문서 URL>` 자리표시자 3곳을 확정된 실제 값으로 치환하는 것을 포함한다
-- [ ] T012 `cmd/naeryeo/errcode.go`의 `failure.Prose()`가 `Docs`가 비어 있지 않을 때만 세 번째 줄로 덧붙이도록 수정한다 — 기존 코드는 `Docs`가 빈 문자열이라 **출력이 바이트 단위로 불변**이어야 한다 (spec 005 FR-007)
-- [ ] T013 `cmd/naeryeo/errcode.go`에 `codeProviderNotConfigured`/`codeMotisUnavailable`/`codeMotisRejected` 상수와 `classifyRouteError`의 `ErrMotis*` 분기, 그리고 `providerNotConfiguredFailure()` 생성자를 추가한다 — 문구는 contracts/error-codes.md의 "문구" 절 그대로, **호스트·포트·HTTP 상태를 문구에 넣지 않는다**. `provider_not_configured`가 spec FR-014의 "다른 실패와 구별되는 신호"다
-- [ ] T014 `cmd/naeryeo/errcode_exhaustive_test.go`의 `coreErrorSamples`에 `ErrMotisUnavailable`·`ErrMotisRejected` 샘플을 추가하고 `just test`로 게이트가 **통과함**을 확인한다 (T010의 실패가 해소됨)
-- [ ] T015 [P] `cmd/naeryeo/errcode_test.go`에 신규 3개 코드의 분류·문구·`Docs` 존재를 테이블 주도로 검증하는 테스트를 추가한다
+- [X] T009 `internal/core/errors.go`에 `ErrMotisUnavailable`(sentinel)과 `ErrMotisRejected{Status int}`(구조체)를 추가한다 — `ErrMotisRejected`는 **Status만 보존**하고 본문·URL은 담지 않는다 (data-model.md §3)
+- [X] T010 `just test`를 실행해 `TestErrorCodeExhaustive_EveryCoreErrorHasACode`가 **실패하는 것을 확인하고 출력을 기록한다** — 게이트가 살아 있음의 증명이며 spec FR-020·SC-004가 요구하는 검증이다. 실패를 보지 않고 다음으로 넘어가지 말 것
+- [X] T011 `cmd/naeryeo/errcode.go`에 self-hosting 문서 URL 상수를 **한 곳에만** 정의하고 — 값과 버전 고정 방식을 여기서 확정한다. 브랜치 고정 링크는 문서가 이동하면 조용히 깨지므로 릴리스 태그 기준 링크 또는 안정 리다이렉트 중 하나를 택하고 근거를 주석에 남긴다 (spec FR-022) — `failure` 구조체에 `Docs string` 필드를, `RouteError`(`cmd/naeryeo/mcp.go`)에 `Docs string \`json:"docs,omitempty"\`` 필드를 추가한다 (contracts/error-codes.md). 완료 조건에 `specs/006-self-hosted-routing-provider/contracts/error-codes.md`의 `<self-hosting 문서 URL>` 자리표시자 3곳을 확정된 실제 값으로 치환하는 것을 포함한다
+- [X] T012 `cmd/naeryeo/errcode.go`의 `failure.Prose()`가 `Docs`가 비어 있지 않을 때만 세 번째 줄로 덧붙이도록 수정한다 — 기존 코드는 `Docs`가 빈 문자열이라 **출력이 바이트 단위로 불변**이어야 한다 (spec 005 FR-007)
+- [X] T013 `cmd/naeryeo/errcode.go`에 `codeProviderNotConfigured`/`codeMotisUnavailable`/`codeMotisRejected` 상수와 `classifyRouteError`의 `ErrMotis*` 분기, 그리고 `providerNotConfiguredFailure()` 생성자를 추가한다 — 문구는 contracts/error-codes.md의 "문구" 절 그대로, **호스트·포트·HTTP 상태를 문구에 넣지 않는다**. `provider_not_configured`가 spec FR-014의 "다른 실패와 구별되는 신호"다
+- [X] T014 `cmd/naeryeo/errcode_exhaustive_test.go`의 `coreErrorSamples`에 `ErrMotisUnavailable`·`ErrMotisRejected` 샘플을 추가하고 `just test`로 게이트가 **통과함**을 확인한다 (T010의 실패가 해소됨)
+- [X] T015 [P] `cmd/naeryeo/errcode_test.go`에 신규 3개 코드의 분류·문구·`Docs` 존재를 테이블 주도로 검증하는 테스트를 추가한다
 
 ### 공유 타입 — 요금 "정보 없음"
 
-- [ ] T016 `internal/core/client.go`의 `RouteResult`에 `FareKnown bool`을 추가하고 ODsay 경로(`toRouteResult`)가 항상 `true`로 채우도록 한다 (data-model.md §2)
-- [ ] T017 `cmd/naeryeo/mcp.go`의 `RouteToolOutput.FareWon`을 `int` → `*int`로 바꾸고 `toRouteToolOutput`이 `FareKnown`에 따라 `nil` 또는 값을 설정하도록 한다 — 값이 있을 때의 와이어 포맷은 **변경 전과 동일**해야 한다
-- [ ] T018 `cmd/naeryeo/route.go`의 `printRouteResult`에 `FareKnown == false`일 때 `요금: N원` 대신 `요금 정보 없음`을 출력하는 분기를 추가한다 — `NoTravelNeeded`를 먼저 분기하는 순서 유지
-- [ ] T019 `just check`를 실행해 기존 테스트가 **한 줄도 수정되지 않은 채** 전부 통과함을 확인한다 — 수정이 필요하다면 T016~T018의 설계가 어긋난 것이다 (spec FR-013, SC-008, quickstart.md S7)
+- [X] T016 `internal/core/client.go`의 `RouteResult`에 `FareKnown bool`을 추가하고 ODsay 경로(`toRouteResult`)가 항상 `true`로 채우도록 한다 (data-model.md §2)
+- [X] T017 `cmd/naeryeo/mcp.go`의 `RouteToolOutput.FareWon`을 `int` → `*int`로 바꾸고 `toRouteToolOutput`이 `FareKnown`에 따라 `nil` 또는 값을 설정하도록 한다 — 값이 있을 때의 와이어 포맷은 **변경 전과 동일**해야 한다
+- [X] T018 `cmd/naeryeo/route.go`의 `printRouteResult`에 `FareKnown == false`일 때 `요금: N원` 대신 `요금 정보 없음`을 출력하는 분기를 추가한다 — `NoTravelNeeded`를 먼저 분기하는 순서 유지
+- [X] T019 `just check`를 실행해 기존 테스트가 **한 줄도 수정되지 않은 채** 전부 통과함을 확인한다 — 수정이 필요하다면 T016~T018의 설계가 어긋난 것이다 (spec FR-013, SC-008, quickstart.md S7)
 
 **Checkpoint**: 설정 저장소·에러 taxonomy·공유 타입이 준비됨. User Story 구현을 시작할 수 있다
 
@@ -94,24 +94,24 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 > **먼저 작성하고 실패를 확인한 뒤 구현할 것**
 
-- [ ] T020 [P] [US1] `internal/motis/client_test.go`에 `httptest.Server`로 `/api/v1/geocode` + `/api/v6/plan` 정상 응답을 고정하고 `FindRoute`가 `core.RouteResult`를 반환하는 happy path 테스트를 작성한다 (`internal/geocode/kakao_test.go`의 서버 고정 패턴을 따를 것)
-- [ ] T021 [P] [US1] `internal/motis/client_test.go`에 테이블 주도 케이스를 추가한다 — geocode 빈 결과 + Kakao 폴백 성공/실패, `itineraries`·`direct` 모두 빈 경우 → `core.ErrNoRoute`, `direct`만 있는 경우 → 성공, 요금 부재 → `FareKnown == false`
-- [ ] T022 [P] [US1] `cmd/naeryeo/setup_test.go`를 재작성해 fake stdin으로 MOTIS 선택 → URL 입력 → 지오코더 선택 → 요약 확인까지 전 단계를 구동하는 테스트를 작성한다 — **어느 단계에서도 상용 API 키를 요구하지 않음**을 함께 단언한다 (spec FR-003, pty 불필요)
-- [ ] T023 [P] [US1] `cmd/naeryeo/main_test.go`에 동일 설정에서 `route` 경로와 MCP 툴 핸들러가 **같은 제공자**를 사용함을 검증하는 테스트를 추가한다 (spec FR-002, SC-005)
-- [ ] T024 [P] [US1] `cmd/naeryeo/routejson_test.go`에 MOTIS 결과의 `--json` 성공 스키마가 ODsay와 동일하고 `fareWon` 키가 **부재**함을 검증하는 테스트를 추가한다 (spec FR-010, FR-011)
+- [X] T020 [P] [US1] `internal/motis/client_test.go`에 `httptest.Server`로 `/api/v1/geocode` + `/api/v6/plan` 정상 응답을 고정하고 `FindRoute`가 `core.RouteResult`를 반환하는 happy path 테스트를 작성한다 (`internal/geocode/kakao_test.go`의 서버 고정 패턴을 따를 것)
+- [X] T021 [P] [US1] `internal/motis/client_test.go`에 테이블 주도 케이스를 추가한다 — geocode 빈 결과 + Kakao 폴백 성공/실패, `itineraries`·`direct` 모두 빈 경우 → `core.ErrNoRoute`, `direct`만 있는 경우 → 성공, 요금 부재 → `FareKnown == false`
+- [X] T022 [P] [US1] `cmd/naeryeo/setup_test.go`를 재작성해 fake stdin으로 MOTIS 선택 → URL 입력 → 지오코더 선택 → 요약 확인까지 전 단계를 구동하는 테스트를 작성한다 — **어느 단계에서도 상용 API 키를 요구하지 않음**을 함께 단언한다 (spec FR-003, pty 불필요)
+- [X] T023 [P] [US1] `cmd/naeryeo/main_test.go`에 동일 설정에서 `route` 경로와 MCP 툴 핸들러가 **같은 제공자**를 사용함을 검증하는 테스트를 추가한다 (spec FR-002, SC-005)
+- [X] T024 [P] [US1] `cmd/naeryeo/routejson_test.go`에 MOTIS 결과의 `--json` 성공 스키마가 ODsay와 동일하고 `fareWon` 키가 **부재**함을 검증하는 테스트를 추가한다 (spec FR-010, FR-011)
 
 ### Implementation for User Story 1
 
-- [ ] T025 [US1] `internal/motis/client.go`에 `Client` 구조체(`BaseURL`, `HTTPClient`, `Logger`, `Geocoder core.Geocoder`)와 `NewClient(baseURL string) *Client`를 구현한다 — `core.Client`의 nil 기본값 처리(10초 타임아웃, `slog.DiscardHandler`) 관례를 그대로 따를 것
-- [ ] T026 [US1] `internal/motis/client.go`에 `resolvePlace`를 구현한다 — `GET /api/v1/geocode?text=<name>` → 첫 매치의 `lat`/`lon`, 빈 배열이면 `Geocoder`(Kakao) 폴백, 그래도 없으면 내부 not-found 신호. Kakao 축은 **현행 그대로** 선택적 폴백으로 남는다 (spec FR-028, data-model.md §5-1, `core.Client.resolveStation`과 동형)
-- [ ] T027 [US1] `internal/motis/client.go`에 `FindRoute(ctx, from, to)`를 구현한다 — 양쪽 `resolvePlace` 후 `GET /api/v6/plan?fromPlace=<lat,lon>&toPlace=<lat,lon>&numItineraries=1`, 응답을 `core.RouteResult`로 매핑(`duration` 초→분, `transfers` 그대로, `FareKnown=false`), not-found는 `*core.ErrPointNotFound{Side}`로 — 결과 항목이 ODsay와 같은 집합이어야 한다 (spec FR-009, data-model.md §5-2)
-- [ ] T028 [US1] `internal/motis/client.go`에 leg → `core.RouteStep` 문구 변환을 구현한다 — WALK/지하철/BUS/그 외 4분기, `routeShortName` → `headsign` → `agencyName` 순 대체 (data-model.md §5-3)
-- [ ] T029 [US1] `internal/motis/client.go`의 HTTP 계층에서 실패를 분류한다 — transport 에러·타임아웃·5xx → `core.ErrMotisUnavailable`, 4xx·디코드 실패 → `*core.ErrMotisRejected{Status}`. **에러를 감쌀 때 요청 URL이 실리지 않도록** 한다 (spec FR-018; `core.doGet`이 `*url.Error`를 감싸며 겪은 문제를 반복하지 말 것)
-- [ ] T030 [US1] `cmd/naeryeo/setup.go`를 재작성한다 — 번호 프롬프트 루프 기반 다단계 마법사(제공자 → 제공자별 입력 → 지오코더 → 요약/확인), MOTIS가 1번이자 Enter 기본값, MOTIS URL 기본값 `http://localhost:8080`. **TUI 프레임워크를 도입하지 않는다**. 기본 선택지가 MOTIS인 것은 spec FR-037의 "기본 제시 경로"이며, 무설정 상태의 암묵 동작을 뜻하지 않는다 — 설정 파일이 없으면 여전히 `provider_not_configured`다 (spec FR-005, FR-037, contracts/cli-interface.md)
-- [ ] T031 [US1] `cmd/naeryeo/setup.go`에 비대화식 플래그를 추가한다 — `--provider`, `--motis-url`, `--geocoder`(bool→string, breaking). **시크릿을 받는 플래그는 만들지 않는다**; 비밀값은 stdin으로만 (spec FR-006, FR-036)
-- [ ] T032 [US1] `cmd/naeryeo/setup.go`에 MOTIS 도달성 프로브를 구현한다 — 저장 **전에** `GET {motis_url}/api/v1/geocode?text=서울역`(타임아웃 5초), 연결 실패/4xx·5xx/매치 0건을 각각 구분해 저장을 거부하고 문서 링크를 안내한다 (contracts/settings-file.md, spec FR-016)
-- [ ] T033 [US1] `cmd/naeryeo/main.go`에 `type routeFinder func(ctx, from, to) (core.RouteResult, error)`와 `newRouteFinder(logger) (routeFinder, *failure)`를 구현한다 — `LoadSettings`로 제공자를 고르고, MOTIS면 `motis.NewClient(settings.MotisURL)`, ODsay면 키체인에서 키를 읽어 `core.NewClient`, 양쪽 모두 지오코더 설정 시 Kakao 주입 (plan.md §1)
-- [ ] T034 [US1] `cmd/naeryeo/route.go`와 `cmd/naeryeo/mcp.go`가 `newRouteFinder`를 **공유**하도록 배선하고, 기존 `apiKey` 파라미터 흐름을 제거한다 — 두 진입점의 제공자 불일치가 구조적으로 불가능해지는 지점 (spec FR-002)
+- [X] T025 [US1] `internal/motis/client.go`에 `Client` 구조체(`BaseURL`, `HTTPClient`, `Logger`, `Geocoder core.Geocoder`)와 `NewClient(baseURL string) *Client`를 구현한다 — `core.Client`의 nil 기본값 처리(10초 타임아웃, `slog.DiscardHandler`) 관례를 그대로 따를 것
+- [X] T026 [US1] `internal/motis/client.go`에 `resolvePlace`를 구현한다 — `GET /api/v1/geocode?text=<name>` → 첫 매치의 `lat`/`lon`, 빈 배열이면 `Geocoder`(Kakao) 폴백, 그래도 없으면 내부 not-found 신호. Kakao 축은 **현행 그대로** 선택적 폴백으로 남는다 (spec FR-028, data-model.md §5-1, `core.Client.resolveStation`과 동형)
+- [X] T027 [US1] `internal/motis/client.go`에 `FindRoute(ctx, from, to)`를 구현한다 — 양쪽 `resolvePlace` 후 `GET /api/v6/plan?fromPlace=<lat,lon>&toPlace=<lat,lon>&numItineraries=1`, 응답을 `core.RouteResult`로 매핑(`duration` 초→분, `transfers` 그대로, `FareKnown=false`), not-found는 `*core.ErrPointNotFound{Side}`로 — 결과 항목이 ODsay와 같은 집합이어야 한다 (spec FR-009, data-model.md §5-2)
+- [X] T028 [US1] `internal/motis/client.go`에 leg → `core.RouteStep` 문구 변환을 구현한다 — WALK/지하철/BUS/그 외 4분기, `routeShortName` → `headsign` → `agencyName` 순 대체 (data-model.md §5-3)
+- [X] T029 [US1] `internal/motis/client.go`의 HTTP 계층에서 실패를 분류한다 — transport 에러·타임아웃·5xx → `core.ErrMotisUnavailable`, 4xx·디코드 실패 → `*core.ErrMotisRejected{Status}`. **에러를 감쌀 때 요청 URL이 실리지 않도록** 한다 (spec FR-018; `core.doGet`이 `*url.Error`를 감싸며 겪은 문제를 반복하지 말 것)
+- [X] T030 [US1] `cmd/naeryeo/setup.go`를 재작성한다 — 번호 프롬프트 루프 기반 다단계 마법사(제공자 → 제공자별 입력 → 지오코더 → 요약/확인), MOTIS가 1번이자 Enter 기본값, MOTIS URL 기본값 `http://localhost:8080`. **TUI 프레임워크를 도입하지 않는다**. 기본 선택지가 MOTIS인 것은 spec FR-037의 "기본 제시 경로"이며, 무설정 상태의 암묵 동작을 뜻하지 않는다 — 설정 파일이 없으면 여전히 `provider_not_configured`다 (spec FR-005, FR-037, contracts/cli-interface.md)
+- [X] T031 [US1] `cmd/naeryeo/setup.go`에 비대화식 플래그를 추가한다 — `--provider`, `--motis-url`, `--geocoder`(bool→string, breaking). **시크릿을 받는 플래그는 만들지 않는다**; 비밀값은 stdin으로만 (spec FR-006, FR-036)
+- [X] T032 [US1] `cmd/naeryeo/setup.go`에 MOTIS 도달성 프로브를 구현한다 — 저장 **전에** `GET {motis_url}/api/v1/geocode?text=서울역`(타임아웃 5초), 연결 실패/4xx·5xx/매치 0건을 각각 구분해 저장을 거부하고 문서 링크를 안내한다 (contracts/settings-file.md, spec FR-016)
+- [X] T033 [US1] `cmd/naeryeo/main.go`에 `type routeFinder func(ctx, from, to) (core.RouteResult, error)`와 `newRouteFinder(logger) (routeFinder, *failure)`를 구현한다 — `LoadSettings`로 제공자를 고르고, MOTIS면 `motis.NewClient(settings.MotisURL)`, ODsay면 키체인에서 키를 읽어 `core.NewClient`, 양쪽 모두 지오코더 설정 시 Kakao 주입 (plan.md §1)
+- [X] T034 [US1] `cmd/naeryeo/route.go`와 `cmd/naeryeo/mcp.go`가 `newRouteFinder`를 **공유**하도록 배선하고, 기존 `apiKey` 파라미터 흐름을 제거한다 — 두 진입점의 제공자 불일치가 구조적으로 불가능해지는 지점 (spec FR-002)
 
 **Checkpoint**: US1 완료 — 상용 키 없이 MOTIS만으로 경로 검색이 동작하고, `route`/`mcp`가 같은 제공자를 쓴다. **MVP 지점**
 
@@ -138,12 +138,12 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 - [ ] T036 [US2] MOTIS 컨테이너를 1회 기동해 `motis config <osm.pbf> <gtfs.zip>`이 생성하는 `config.yml`의 실제 스키마를 확인하고 research.md U1을 해소한다
 - [ ] T037 [US2] KTDB GTFS의 공식 확보 경로·갱신 주기·지역 커버리지를 확인해 research.md U3을 해소한다 — Transitous의 Dropbox 링크는 **참고**로만 두고 원본 경로를 1순위로 삼는다 (research.md R7)
-- [ ] T038 [US2] `deploy/motis/compose.yaml`을 작성한다 — 이미지 태그 **고정**(`latest` 금지), import와 server를 분리한 2단계 구성, GTFS/OSM은 호스트 바인드 마운트로 교체 가능하게
+- [X] T038 [US2] `deploy/motis/compose.yaml`을 작성한다 — 이미지 태그 **고정**(`latest` 금지), import와 server를 분리한 2단계 구성, GTFS/OSM은 호스트 바인드 마운트로 교체 가능하게
 - [ ] T039 [US2] 실제 그래프 빌드를 1회 수행하며 소요 시간·최대 RSS·디스크 사용량을 계측해 research.md U2를 해소한다 (spec FR-023의 직접 입력)
 - [ ] T040 [US2] `docs/self-hosting.md`를 완성한다 — 데이터 확보처, 실행 절차, naeryeo 연결 방법(`naeryeo setup --provider=motis --motis-url=...`), T039의 실측 자원 요구치 (spec FR-021, FR-022, FR-023)
 - [ ] T041 [US2] `docs/self-hosting.md`에 데이터 한계 절을 추가한다 — GTFS 갱신 주기, 실시간 정보 부재, 지역 커버리지, 상용 서비스와 결과가 다를 수 있음 (spec FR-024, Assumptions)
 - [ ] T041a [US2] `docs/self-hosting.md`와 `README.md`에 **잔여 외부 의존** 절을 추가한다 — 경로 검색은 자체 호스팅으로 외부 의존이 사라지지만 건물명·주소 검색은 여전히 외부 장소 검색 서비스를 쓴다는 점, 역·정류장 이름만 쓰면 그 의존조차 없다는 점, 그 선택이 제공자와 독립이라는 점 (spec FR-029, FR-030). T041의 데이터 한계 절과는 **분리된 절**로 쓴다 — 하나는 데이터의 품질·범위, 다른 하나는 의존성 축을 다룬다
-- [ ] T042 [US2] `README.md`를 개편한다 — 제공자 개념 도입, 자체 호스팅을 **1순위 경로**로 서술, ODsay는 동등한 대안으로, `logout` 안내 제거(`README.md:172-173`), `--json` 문서화, `docs/self-hosting.md` 링크 (spec FR-025, FR-035, FR-037)
+- [X] T042 [US2] `README.md`를 개편한다 — 제공자 개념 도입, 자체 호스팅을 **1순위 경로**로 서술, ODsay는 동등한 대안으로, `logout` 안내 제거(`README.md:172-173`), `--json` 문서화, `docs/self-hosting.md` 링크 (spec FR-025, FR-035, FR-037)
 - [ ] T043 [US2] 제3자에게 문서만 주고 구축을 시켜 quickstart.md S3의 5개 항목을 검증하고 결과를 기록한다 (spec SC-003, SC-004)
 
 **Checkpoint**: US2 완료 — 문서만으로 자체 호스팅 환경을 구축할 수 있다
@@ -160,16 +160,16 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 ### Tests for User Story 3 (MANDATORY) ⚠️
 
-- [ ] T044 [P] [US3] `cmd/naeryeo/routejson_test.go`에 제공자 미설정 상태에서 `route --json`과 MCP 툴이 **같은** `provider_not_configured` 코드·문구를 반환함을 검증하는 테스트를 추가한다 (spec 005 FR-016)
-- [ ] T045 [P] [US3] `cmd/naeryeo/routejson_test.go`에 MOTIS 연결 불가 → `motis_unavailable`, 4xx → `motis_rejected`이고 **세 코드 모두 `docs`가 비어 있지 않음**을 검증하는 테스트를 추가한다 — 출력에 담긴 안내만으로 복구 경로에 도달할 수 있어야 한다 (spec FR-015, FR-016, FR-017, SC-009)
-- [ ] T045a [P] [US3] `cmd/naeryeo/routejson_test.go`에 **폴백이 일어나지 않음**을 단언하는 테스트를 추가한다 — 설정은 MOTIS이고 키체인에 ODsay 키도 저장된 상태에서 MOTIS가 연결 불가일 때, 결과가 `motis_unavailable`이고 ODsay 엔드포인트로의 요청이 **0건**임을 확인한다 (spec FR-008 "자동 대체 금지"). 폴백 금지는 사용자가 비용을 통제하려고 자체 호스팅을 고른 이유 자체이므로, 부정 테스트가 없으면 나중에 "친절한 폴백"이 추가되는 것을 막을 장치가 없다
-- [ ] T046 [P] [US3] `cmd/naeryeo/routejson_test.go`에 실패 시 stdout·stderr 전체에 테스트가 쓴 MOTIS 호스트·포트 문자열(`127.0.0.1:PORT`)이 **나타나지 않음**을 부분 일치로 단언하는 테스트를 추가한다 (spec FR-018, SC-006)
-- [ ] T047 [P] [US3] `cmd/naeryeo/route_test.go`에 신규 3개 코드가 프로즈 모드에서 message/hint/docs **3줄**로 렌더링되고, 기존 코드들은 변경 전과 바이트 동일함을 검증하는 테스트를 추가한다
+- [X] T044 [P] [US3] `cmd/naeryeo/routejson_test.go`에 제공자 미설정 상태에서 `route --json`과 MCP 툴이 **같은** `provider_not_configured` 코드·문구를 반환함을 검증하는 테스트를 추가한다 (spec 005 FR-016)
+- [X] T045 [P] [US3] `cmd/naeryeo/routejson_test.go`에 MOTIS 연결 불가 → `motis_unavailable`, 4xx → `motis_rejected`이고 **세 코드 모두 `docs`가 비어 있지 않음**을 검증하는 테스트를 추가한다 — 출력에 담긴 안내만으로 복구 경로에 도달할 수 있어야 한다 (spec FR-015, FR-016, FR-017, SC-009)
+- [X] T045a [P] [US3] `cmd/naeryeo/routejson_test.go`에 **폴백이 일어나지 않음**을 단언하는 테스트를 추가한다 — 설정은 MOTIS이고 키체인에 ODsay 키도 저장된 상태에서 MOTIS가 연결 불가일 때, 결과가 `motis_unavailable`이고 ODsay 엔드포인트로의 요청이 **0건**임을 확인한다 (spec FR-008 "자동 대체 금지"). 폴백 금지는 사용자가 비용을 통제하려고 자체 호스팅을 고른 이유 자체이므로, 부정 테스트가 없으면 나중에 "친절한 폴백"이 추가되는 것을 막을 장치가 없다
+- [X] T046 [P] [US3] `cmd/naeryeo/routejson_test.go`에 실패 시 stdout·stderr 전체에 테스트가 쓴 MOTIS 호스트·포트 문자열(`127.0.0.1:PORT`)이 **나타나지 않음**을 부분 일치로 단언하는 테스트를 추가한다 (spec FR-018, SC-006)
+- [X] T047 [P] [US3] `cmd/naeryeo/route_test.go`에 신규 3개 코드가 프로즈 모드에서 message/hint/docs **3줄**로 렌더링되고, 기존 코드들은 변경 전과 바이트 동일함을 검증하는 테스트를 추가한다
 
 ### Implementation for User Story 3
 
-- [ ] T048 [US3] `cmd/naeryeo/route.go`에 `newRouteFinder`가 반환한 사전 실패(`provider_not_configured` 등)를 검색 시도 **이전에** 프로즈·JSON 양쪽으로 보고하는 경로를 구현한다 (contracts/cli-interface.md)
-- [ ] T049 [US3] `cmd/naeryeo/mcp.go`의 툴 핸들러에 동일한 사전 실패 경로를 구현한다 — `failureToolResult`를 재사용해 구조화된 코드가 `structuredContent`로 전달되게 한다
+- [X] T048 [US3] `cmd/naeryeo/route.go`에 `newRouteFinder`가 반환한 사전 실패(`provider_not_configured` 등)를 검색 시도 **이전에** 프로즈·JSON 양쪽으로 보고하는 경로를 구현한다 (contracts/cli-interface.md)
+- [X] T049 [US3] `cmd/naeryeo/mcp.go`의 툴 핸들러에 동일한 사전 실패 경로를 구현한다 — `failureToolResult`를 재사용해 구조화된 코드가 `structuredContent`로 전달되게 한다
 - [ ] T050 [US3] 만료된(과거 날짜만 있는) 타임테이블에서 MOTIS `plan`이 어떤 응답을 주는지 실측해 research.md U4를 해소하고, 필요하면 제공자가 MOTIS일 때만 `no_route`의 hint에 "시간표 데이터가 최신인지 확인" 문구를 덧붙인다 (spec FR-016)
 
 **Checkpoint**: US3 완료 — 자체 호스팅 실패가 코드·문구·문서 링크로 진단 가능하고 내부망 정보가 새지 않는다
@@ -186,19 +186,19 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 ### Tests for User Story 4 (MANDATORY) ⚠️
 
-- [ ] T051 [P] [US4] `cmd/naeryeo/route_test.go`에 fake 키체인에 ODsay 키가 있고 설정 파일이 없는 상태에서 첫 검색이 `provider_not_configured`로 실패하고 setup을 안내함을 검증하는 테스트를 추가한다 (spec FR-031, FR-032)
-- [ ] T052 [P] [US4] `cmd/naeryeo/setup_test.go`에 `--provider=odsay` 재선택 시 **키 재입력 없이** 저장된 키가 재사용됨을 검증하는 테스트를 추가한다 — 정상 사용까지 초기 설정 1회로 끝나야 한다 (spec FR-033, SC-010)
-- [ ] T053 [P] [US4] `cmd/naeryeo/setup_test.go`에 `--delete=odsay|kakao|all`의 멱등 동작과 "삭제할 키가 없습니다" 구분, 그리고 **설정 파일이 그대로 남음**을 검증하는 테이블 주도 테스트를 추가한다 (data-model.md §1)
-- [ ] T054 [P] [US4] `cmd/naeryeo/main_test.go`에 `naeryeo logout`이 unknown command로 실패하고 usage 문자열에 `logout`이 없음을 검증하는 테스트를 추가한다
-- [ ] T055 [P] [US4] `cmd/naeryeo/setup_test.go`에 시크릿을 받는 플래그가 **존재하지 않음**을 FlagSet 순회로 단언하는 테스트를 추가한다 (spec FR-006)
+- [X] T051 [P] [US4] `cmd/naeryeo/route_test.go`에 fake 키체인에 ODsay 키가 있고 설정 파일이 없는 상태에서 첫 검색이 `provider_not_configured`로 실패하고 setup을 안내함을 검증하는 테스트를 추가한다 (spec FR-031, FR-032)
+- [X] T052 [P] [US4] `cmd/naeryeo/setup_test.go`에 `--provider=odsay` 재선택 시 **키 재입력 없이** 저장된 키가 재사용됨을 검증하는 테스트를 추가한다 — 정상 사용까지 초기 설정 1회로 끝나야 한다 (spec FR-033, SC-010)
+- [X] T053 [P] [US4] `cmd/naeryeo/setup_test.go`에 `--delete=odsay|kakao|all`의 멱등 동작과 "삭제할 키가 없습니다" 구분, 그리고 **설정 파일이 그대로 남음**을 검증하는 테이블 주도 테스트를 추가한다 (data-model.md §1)
+- [X] T054 [P] [US4] `cmd/naeryeo/main_test.go`에 `naeryeo logout`이 unknown command로 실패하고 usage 문자열에 `logout`이 없음을 검증하는 테스트를 추가한다
+- [X] T055 [P] [US4] `cmd/naeryeo/setup_test.go`에 시크릿을 받는 플래그가 **존재하지 않음**을 FlagSet 순회로 단언하는 테스트를 추가한다 (spec FR-006)
 
 ### Implementation for User Story 4
 
-- [ ] T056 [US4] `cmd/naeryeo/setup.go`에 `--delete=odsay|kakao|all`을 구현한다 — 기존 `logout.go`의 멱등 동작과 "삭제할 키가 없습니다" 구분을 그대로 옮기고, **설정 파일은 건드리지 않는다** (spec FR-007, FR-035)
-- [ ] T057 [US4] `cmd/naeryeo/setup.go`에 대화식 마법사 첫 화면의 3번 선택지("저장된 자격증명 삭제")를 구현한다 (spec FR-035 — 삭제 기능은 초기 설정 절차 안에서 제공된다)
-- [ ] T058 [US4] `cmd/naeryeo/logout.go`와 `cmd/naeryeo/logout_test.go`를 삭제하고, `cmd/naeryeo/main.go`의 `logout` 케이스(`main.go:149`)와 usage 문자열(`main.go:197`)을 갱신한다 (spec FR-035 — 삭제 전용 최상위 명령 제거)
-- [ ] T059 [US4] `cmd/naeryeo/setup.go`에 `--geocoder`를 구버전 형식(값 없는 bool)으로 호출했을 때 "이제 `--geocoder=kakao` 형태로 지정해야 합니다"라는 마이그레이션 안내를 출력하도록 한다 — 조용히 실패해서는 안 된다 (spec FR-036, contracts/cli-interface.md)
-- [ ] T060 [US4] `README.md`에 마이그레이션 안내 절을 추가한다 — "업그레이드 후 `naeryeo setup`을 한 번 다시 실행해야 합니다"와 그 이유, 저장된 키는 삭제되지 않고 재사용된다는 점, 그리고 FR-034가 요구하는 세 가지 breaking change(제공자 재설정 강제 / 삭제 전용 명령 제거 / 장소 검색 플래그 형태 변경) (spec FR-034)
+- [X] T056 [US4] `cmd/naeryeo/setup.go`에 `--delete=odsay|kakao|all`을 구현한다 — 기존 `logout.go`의 멱등 동작과 "삭제할 키가 없습니다" 구분을 그대로 옮기고, **설정 파일은 건드리지 않는다** (spec FR-007, FR-035)
+- [X] T057 [US4] `cmd/naeryeo/setup.go`에 대화식 마법사 첫 화면의 3번 선택지("저장된 자격증명 삭제")를 구현한다 (spec FR-035 — 삭제 기능은 초기 설정 절차 안에서 제공된다)
+- [X] T058 [US4] `cmd/naeryeo/logout.go`와 `cmd/naeryeo/logout_test.go`를 삭제하고, `cmd/naeryeo/main.go`의 `logout` 케이스(`main.go:149`)와 usage 문자열(`main.go:197`)을 갱신한다 (spec FR-035 — 삭제 전용 최상위 명령 제거)
+- [X] T059 [US4] `cmd/naeryeo/setup.go`에 `--geocoder`를 구버전 형식(값 없는 bool)으로 호출했을 때 "이제 `--geocoder=kakao` 형태로 지정해야 합니다"라는 마이그레이션 안내를 출력하도록 한다 — 조용히 실패해서는 안 된다 (spec FR-036, contracts/cli-interface.md)
+- [X] T060 [US4] `README.md`에 마이그레이션 안내 절을 추가한다 — "업그레이드 후 `naeryeo setup`을 한 번 다시 실행해야 합니다"와 그 이유, 저장된 키는 삭제되지 않고 재사용된다는 점, 그리고 FR-034가 요구하는 세 가지 breaking change(제공자 재설정 강제 / 삭제 전용 명령 제거 / 장소 검색 플래그 형태 변경) (spec FR-034)
 - [ ] T060a [US4] 릴리스 노트에 breaking change가 실리도록 보장한다. 이 저장소는 `@semantic-release/changelog`를 쓰지 않고 `release-notes-generator`가 **커밋 메시지에서** 노트를 생성하므로(`.releaserc.json`), CHANGELOG 파일을 만드는 대신 해당 변경을 담은 커밋에 `BREAKING CHANGE:` 푸터를 넣어야 한다 — FR-034의 세 항목 각각에 "무엇을 해야 하는가"를 한 줄씩 포함한다. T069의 커밋 메시지 제안에 이 푸터가 포함되어야 하며, commitlint를 통과하는지 확인한다 (spec FR-034, 헌법 원칙 IV)
 
 **Checkpoint**: US4 완료 — 기존 사용자가 안내를 따라 1회 재설정으로 복구된다
@@ -209,15 +209,15 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 **Purpose**: 여러 스토리에 걸치는 마무리와 문서 정합성
 
-- [ ] T061 [P] `skills/naeryeo/SKILL.md`를 개편한다 — 제공자 개념(setup에서 MOTIS/ODsay 선택, env var 언급 없음), 자체 호스팅 문서 링크, 에러 코드별 분기 안내(`docs` 필드가 있으면 사용자에게 그대로 전달), 에러 메시지 임의 재구성 금지 (spec FR-026)
-- [ ] T062 [P] `skills/naeryeo/SKILL.md`에 **AI가 사용자 동의 없이 자체 호스팅 환경을 설치·기동하지 않도록** 명시적 금지 문구를 추가한다 (spec FR-027)
-- [ ] T063 [P] `skills/naeryeo/SKILL.md`의 `naeryeo logout`(`:67`)·`naeryeo logout --geocoder`(`:81`) 언급을 제거하고 `setup --delete` 형식으로 교체한다
-- [ ] T064 [P] `specs/005-structured-output-contract/contracts/error-codes.md`의 "향후 확장" 절(`:70-75`)을 갱신해 `provider_not_configured`·`motis_*`·`docs`가 실현되었음을 명시하고 이 기능의 contracts/error-codes.md를 가리키게 한다
-- [ ] T065 provider × geocoder 4개 조합(motis×none, motis×kakao, odsay×none, odsay×kakao)이 모두 동작함을 검증하는 테스트를 추가한다 — 특히 **motis×none에서 역·정류장 이름 검색이 외부 호출 없이 동작**하는 것이 이 기능의 핵심 주장이다 (spec FR-030, SC-002, quickstart.md S6). 4개 조합 모두에 **동일한 인자**(`--from`, `--to`)를 주어 호출하고, 호출 형태가 제공자에 따라 달라지지 않음을 단언한다 (spec FR-012)
+- [X] T061 [P] `skills/naeryeo/SKILL.md`를 개편한다 — 제공자 개념(setup에서 MOTIS/ODsay 선택, env var 언급 없음), 자체 호스팅 문서 링크, 에러 코드별 분기 안내(`docs` 필드가 있으면 사용자에게 그대로 전달), 에러 메시지 임의 재구성 금지 (spec FR-026)
+- [X] T062 [P] `skills/naeryeo/SKILL.md`에 **AI가 사용자 동의 없이 자체 호스팅 환경을 설치·기동하지 않도록** 명시적 금지 문구를 추가한다 (spec FR-027)
+- [X] T063 [P] `skills/naeryeo/SKILL.md`의 `naeryeo logout`(`:67`)·`naeryeo logout --geocoder`(`:81`) 언급을 제거하고 `setup --delete` 형식으로 교체한다
+- [X] T064 [P] `specs/005-structured-output-contract/contracts/error-codes.md`의 "향후 확장" 절(`:70-75`)을 갱신해 `provider_not_configured`·`motis_*`·`docs`가 실현되었음을 명시하고 이 기능의 contracts/error-codes.md를 가리키게 한다
+- [X] T065 provider × geocoder 4개 조합(motis×none, motis×kakao, odsay×none, odsay×kakao)이 모두 동작함을 검증하는 테스트를 추가한다 — 특히 **motis×none에서 역·정류장 이름 검색이 외부 호출 없이 동작**하는 것이 이 기능의 핵심 주장이다 (spec FR-030, SC-002, quickstart.md S6). 4개 조합 모두에 **동일한 인자**(`--from`, `--to`)를 주어 호출하고, 호출 형태가 제공자에 따라 달라지지 않음을 단언한다 (spec FR-012)
 - [ ] T066 quickstart.md S2를 수행한다 — 실 MOTIS로 대표 질의 3종(강남역→홍대입구역, 서면역→해운대역, 대전역→광주송정역)을 실행하고 결과를 기록한다. 실패하는 질의가 있으면 커버리지 한계로 `docs/self-hosting.md`에 명시한다 (spec SC-007, research.md U5 해소)
 - [ ] T067 3개 OS(linux/macOS/windows) CI에서 `just check`가 전부 green임을 확인한다 — 설정 파일 경로가 OS별로 갈리므로 이 매트릭스가 이번 기능의 실질적 게이트다 (GYE-296)
 - [ ] T068 spec.md의 SC-001~SC-011을 하나씩 대조해 미충족 항목이 없는지 확인하고 결과를 기록한다
-- [ ] T069 `just fmt` → `just lint` → `just test`를 실행해 전부 green임을 확인하고, 변경 diff와 Conventional Commits 형식의 커밋 메시지를 사람에게 제시한다 (헌법 원칙 III·IV — **확인 없이 커밋하지 않는다**)
+- [X] T069 `just fmt` → `just lint` → `just test`를 실행해 전부 green임을 확인하고, 변경 diff와 Conventional Commits 형식의 커밋 메시지를 사람에게 제시한다 (헌법 원칙 III·IV — **확인 없이 커밋하지 않는다**)
 
 ---
 
