@@ -1,0 +1,55 @@
+# Self-hosted MOTIS for naeryeo.
+#
+# ⚠️ UNVERIFIED — this file has not yet been run end to end against real Korean
+#    transit data. The image tag, the config generation step, and the volume
+#    layout are all derived from upstream documentation rather than from a
+#    working deployment. See docs/self-hosting.md and spec 006 tasks
+#    T036/T038/T039 before relying on it.
+#
+# Read docs/self-hosting.md first — it covers where the data comes from, how
+# much disk and memory the graph build needs, and how to connect naeryeo.
+
+services:
+  # One-shot graph build. Run this once per data refresh, not on every boot:
+  #   docker compose run --rm motis-import
+  #
+  # It reads the inputs from ./data and writes the prepared graph back there,
+  # so the server below starts without redoing the work.
+  motis-import:
+    # Pinned rather than :latest on purpose. A routing engine that silently
+    # changes version between the build and the serve is a debugging problem
+    # nobody wants; bumping this is a reviewed change.
+    image: ghcr.io/motis-project/motis:v2.0.0
+    working_dir: /data
+    volumes:
+      - ./data:/data
+    command: >-
+      sh -c "motis config *.osm.pbf *.zip && motis import"
+    profiles:
+      - import
+
+  motis-server:
+    image: ghcr.io/motis-project/motis:v2.0.0
+    working_dir: /data
+    volumes:
+      - ./data:/data
+    command: ["motis", "server"]
+    ports:
+      # Bound to loopback by default: the engine has no authentication, so it
+      # should not be reachable from the wider network without a deliberate
+      # decision. Change to "8080:8080" only if you understand that.
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      # MOTIS exposes no dedicated health endpoint, so a geocode query for a
+      # name any Korean dataset contains doubles as one — it proves the process
+      # is up AND that its index is loaded.
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- 'http://localhost:8080/api/v1/geocode?text=%EC%84%9C%EC%9A%B8%EC%97%AD'
+          | grep -q '"lat"'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s

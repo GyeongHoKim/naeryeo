@@ -11,5 +11,8 @@
 # Node tooling (commitlint/husky)
 node_modules/
 
+# Self-hosted MOTIS input data (GTFS zip / OSM pbf are hundreds of MB to GB)
+/deploy/motis/data/
+
 # OS/editor cruft
 .DS_Store
