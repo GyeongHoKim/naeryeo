@@ -50,6 +50,42 @@ var (
 	ErrGeocoderUnavailable = errors.New("core: geocoder is unavailable")
 )
 
+var (
+	// ErrMotisUnavailable indicates a self-hosted MOTIS instance could not be
+	// reached: connection refused, DNS failure, timeout, or a server-side
+	// (5xx) response. Retrying later may work, which is what separates it
+	// from ErrMotisRejected.
+	//
+	// It is deliberately a bare sentinel with no detail: the only context
+	// worth attaching would be the endpoint, and that is the user's private
+	// network address, which must not travel to an AI caller (spec 006
+	// FR-018). Diagnostics go to the debug log on stderr instead.
+	ErrMotisUnavailable = errors.New("core: MOTIS is unavailable")
+)
+
+// ErrMotisRejected indicates a self-hosted MOTIS instance answered but
+// refused or could not serve the request: a 4xx status, or a body that could
+// not be decoded into the expected shape. Retrying it unchanged is
+// pointless — the fix is in the engine's configuration or its loaded data.
+//
+// Only Status is preserved. Unlike ErrGeocoderRejected, which keeps the
+// provider's code and message because Kakao's "-10" is a real branch signal,
+// MOTIS is the user's own server: it has no standard error vocabulary worth
+// branching on, and echoing its body back would only create a path for
+// internal network details to leak.
+type ErrMotisRejected struct {
+	// Status is the HTTP status code, or 0 when the failure was a decode
+	// error rather than a status.
+	Status int
+}
+
+func (e *ErrMotisRejected) Error() string {
+	if e.Status == 0 {
+		return "core: MOTIS returned a response that could not be understood"
+	}
+	return fmt.Sprintf("core: MOTIS rejected the request (HTTP %d)", e.Status)
+}
+
 // ErrGeocoderRejected indicates the geocoder rejected the request with a
 // client-error HTTP status (4xx other than 401/403 — most commonly 400). It
 // preserves the HTTP status and, when the provider includes them, the

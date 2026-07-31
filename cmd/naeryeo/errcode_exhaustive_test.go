@@ -30,6 +30,8 @@ var coreErrorSamples = map[string]error{
 	"ErrGeocoderRejected":    &core.ErrGeocoderRejected{Status: 400},
 	"ErrPointNotFound":       &core.ErrPointNotFound{Side: "from", Name: "x"},
 	"ErrUpstreamRejected":    &core.ErrUpstreamRejected{Code: "500", Message: "x"},
+	"ErrMotisUnavailable":    core.ErrMotisUnavailable,
+	"ErrMotisRejected":       &core.ErrMotisRejected{Status: 400},
 }
 
 // notReachableFromPresentation lists exported core errors that deliberately

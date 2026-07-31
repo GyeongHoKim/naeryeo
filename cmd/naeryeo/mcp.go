@@ -47,6 +47,7 @@ type RouteError struct {
 	Hint    string `json:"hint,omitempty" jsonschema:"사용자가 취해야 할 조치가 있을 때만 존재"`
 	Side    string `json:"side,omitempty" jsonschema:"point_not_found 전용. from/to/both"`
 	Name    string `json:"name,omitempty" jsonschema:"point_not_found 전용. 인식하지 못한 입력값"`
+	Docs    string `json:"docs,omitempty" jsonschema:"사용자가 직접 해결해야 하는 실패일 때만 존재하는 문서 URL. 있으면 사용자에게 그대로 전달한다"`
 }
 
 // toRouteToolOutput maps a core.RouteResult onto the envelope's success shape.

@@ -70,6 +70,21 @@ const (
 	// this one never comes from classifyRouteError — the CLI raises it before a
 	// search is ever attempted.
 	codeInvalidArguments errorCode = "invalid_arguments"
+	// codeProviderNotConfigured: no routing provider has been chosen, so there
+	// is nothing to search with. Distinct from codeAPIKeyMissing, which means
+	// a provider IS chosen (ODsay) and only its key is absent. A stored key
+	// never implies a provider — the choice is always explicit (spec 006
+	// FR-008, FR-031).
+	codeProviderNotConfigured errorCode = "provider_not_configured"
+	// codeMotisUnavailable: the user's self-hosted engine could not be
+	// reached. Retrying later may work, and the docs field says where to look
+	// if it does not.
+	codeMotisUnavailable errorCode = "motis_unavailable"
+	// codeMotisRejected: the self-hosted engine answered but could not serve
+	// the request. Retrying is pointless — the fix is in the engine's config
+	// or its loaded data. Counterpart to codeMotisUnavailable, same way
+	// codeGeocoderRejected is to codeGeocoderRateLimited.
+	codeMotisRejected errorCode = "motis_rejected"
 	// codeInternalError is the safe default for an error that matches nothing
 	// above. It must be unreachable in practice — the exhaustiveness test
 	// exists to keep it that way — but it is what guarantees that no unclassified
@@ -98,17 +113,38 @@ type failure struct {
 	// ("from"/"to"/"both") and the input that could not be resolved.
 	Side string
 	Name string
+	// Docs is a URL the user can open to resolve this failure themselves. It
+	// is set only for the self-hosting codes, where the fix lives in the
+	// user's own infrastructure rather than in naeryeo — every other failure
+	// is fully described by Message and Hint.
+	Docs string
 }
+
+// selfHostingDocsURL is where a user is sent to stand up or repair their own
+// routing engine. It is referenced by three error codes, so it is defined
+// once: three copies would drift the moment the document moves.
+//
+// The path is part of the error contract, not an implementation detail —
+// moving or renaming docs/self-hosting.md breaks published error payloads the
+// same way renaming an error code would. TestSelfHostingDocsURL_PathExists
+// enforces that by failing when the file is not where this URL claims.
+const selfHostingDocsURL = "https://github.com/GyeongHoKim/naeryeo/blob/main/docs/self-hosting.md"
 
 // Prose renders the failure the way the CLI's default (non-JSON) output and
 // the MCP tool's text content present it: the reason, then the hint on its own
-// line when there is one. This reproduces the pre-005 wording exactly, which is
-// what lets the existing prose tests pass unchanged (spec 005 FR-007).
+// line when there is one, then the docs link on a third line when there is one.
+// This reproduces the pre-005 wording exactly for every code that carries no
+// Docs — which is all of them except the self-hosting codes — so the existing
+// prose tests pass unchanged (spec 005 FR-007, spec 006 FR-017).
 func (f failure) Prose() string {
-	if f.Hint == "" {
-		return f.Message
+	out := f.Message
+	if f.Hint != "" {
+		out += "\n" + f.Hint
 	}
-	return f.Message + "\n" + f.Hint
+	if f.Docs != "" {
+		out += "\n" + f.Docs
+	}
+	return out
 }
 
 // classifyRouteError turns a core/config error into the single failure value
@@ -126,6 +162,7 @@ func classifyRouteError(err error, geocoderConfigured bool) failure {
 	var pointErr *core.ErrPointNotFound
 	var rejErr *core.ErrGeocoderRejected
 	var upstreamErr *core.ErrUpstreamRejected
+	var motisErr *core.ErrMotisRejected
 
 	switch {
 	case errors.Is(err, core.ErrAPIKeyMissing), errors.Is(err, config.ErrNotConfigured):
@@ -191,6 +228,26 @@ func classifyRouteError(err error, geocoderConfigured bool) failure {
 			Code:    codeUpstreamUnavailable,
 			Message: "경로 검색 서비스에 연결할 수 없습니다. 잠시 후 다시 시도하세요",
 		}
+	case errors.Is(err, core.ErrMotisUnavailable):
+		// Kept separate from codeUpstreamUnavailable even though both mean
+		// "retry later": this one is the user's own server, so the follow-up
+		// action is theirs to take and the docs link is worth carrying.
+		return failure{
+			Code:    codeMotisUnavailable,
+			Message: "자체 호스팅한 경로 검색 엔진에 연결할 수 없습니다. 잠시 후 다시 시도하세요",
+			Hint:    "엔진이 실행 중인지 확인하세요",
+			Docs:    selfHostingDocsURL,
+		}
+	case errors.As(err, &motisErr):
+		// The HTTP status stays out of the message: it says nothing the user
+		// can act on, and the actionable part — the engine's data or config —
+		// is the same either way. --debug still has it, on stderr.
+		return failure{
+			Code:    codeMotisRejected,
+			Message: "자체 호스팅한 경로 검색 엔진이 요청을 처리하지 못했습니다",
+			Hint:    "엔진의 시간표·지도 데이터가 정상적으로 적재되었는지 확인하세요",
+			Docs:    selfHostingDocsURL,
+		}
 	case errors.As(err, &upstreamErr):
 		// The routing provider's own Code and Message stay out of this: they
 		// carry server internals (shard ids, trace handles) that mean nothing
@@ -226,9 +283,26 @@ func credentialStoreFailure() failure {
 	}
 }
 
-// toRouteError projects the failure onto its serialized form. Hint, Side, and
-// Name are omitempty in RouteError, so the empty values here simply drop out of
-// the document rather than appearing as empty strings.
+// providerNotConfiguredFailure describes a run with no routing provider
+// chosen. It is built here rather than derived from a core error because no
+// search was ever attempted — the settings file, not the engine, is what is
+// missing.
+//
+// A stored ODsay key deliberately does NOT satisfy this: inferring a provider
+// from a leftover credential would put a permanent exception into the state
+// model to serve a one-time migration (spec 006 FR-031).
+func providerNotConfiguredFailure() failure {
+	return failure{
+		Code:    codeProviderNotConfigured,
+		Message: "경로 검색 제공자가 설정되지 않았습니다",
+		Hint:    "naeryeo setup을 실행해 자체 호스팅(MOTIS) 또는 ODsay 중 하나를 선택하세요",
+		Docs:    selfHostingDocsURL,
+	}
+}
+
+// toRouteError projects the failure onto its serialized form. Hint, Side,
+// Name, and Docs are omitempty in RouteError, so the empty values here simply
+// drop out of the document rather than appearing as empty strings.
 func (f failure) toRouteError() *RouteError {
 	return &RouteError{
 		Code:    string(f.Code),
@@ -236,5 +310,6 @@ func (f failure) toRouteError() *RouteError {
 		Hint:    f.Hint,
 		Side:    f.Side,
 		Name:    f.Name,
+		Docs:    f.Docs,
 	}
 }
