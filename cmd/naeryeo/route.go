@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"strconv"
 	"strings"
 
-	"github.com/GyeongHoKim/naeryeo/internal/config"
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 )
 
@@ -20,9 +18,8 @@ import (
 func runRoute(
 	args []string,
 	stdout, stderr io.Writer,
-	load func() (string, error),
-	loadGeocoder func() (string, error),
-	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
+	resolve providerResolver,
+	geocoderConfigured func() bool,
 ) int {
 	// Whether the caller wants JSON has to be known before Parse runs: a parse
 	// failure is itself a result --json must report as a document, and Parse
@@ -56,17 +53,18 @@ func runRoute(
 		return 1
 	}
 
-	apiKey, loadErr := load()
-	if errors.Is(loadErr, config.ErrNotConfigured) {
-		return reportRouteFailure(stdout, stderr, jsonOut, loadErr, geocoderConfigured(loadGeocoder), *debug)
-	}
-	if loadErr != nil {
-		return reportFailure(stdout, stderr, jsonOut, credentialStoreFailure())
+	// Everything that can be known before a search — which provider, whether
+	// its credential is available, whether the keychain can even be read — is
+	// settled here, so those failures reach the caller through the same coded
+	// document as a failed search rather than as a special case.
+	findRoute, preflight := resolve()
+	if preflight != nil {
+		return reportFailure(stdout, stderr, jsonOut, *preflight)
 	}
 
-	result, err := findRoute(context.Background(), apiKey, *from, *to)
+	result, err := findRoute(context.Background(), *from, *to)
 	if err != nil {
-		return reportRouteFailure(stdout, stderr, jsonOut, err, geocoderConfigured(loadGeocoder), *debug)
+		return reportRouteFailure(stdout, stderr, jsonOut, err, geocoderConfigured(), *debug)
 	}
 
 	if jsonOut {
@@ -143,16 +141,6 @@ func reportRouteFailure(stdout, stderr io.Writer, jsonOut bool, err error, geoco
 		}
 	}
 	return reportFailure(stdout, stderr, jsonOut, classifyRouteError(err, geocoderConfigured))
-}
-
-// geocoderConfigured reports whether a place-search key is stored. runRoute
-// and the MCP tool handler use it to decide whether to append the FR-007
-// "set up --geocoder" hint: the hint only helps when no geocoder key exists.
-// loadGeocoder is only called on an error path, so the happy path does not
-// touch the keychain a second time.
-func geocoderConfigured(loadGeocoder func() (string, error)) bool {
-	key, err := loadGeocoder()
-	return err == nil && key != ""
 }
 
 // reportRouteError writes a message describing err to stderr. It always
@@ -237,6 +225,15 @@ func printRouteResult(stdout io.Writer, from, to string, result core.RouteResult
 		if _, err := fmt.Fprintf(stdout, "%d. %s\n", i+1, step.Description); err != nil {
 			return 1
 		}
+	}
+	// "요금 정보 없음" rather than "요금: 0원": a provider that carries no fare
+	// data must not be rendered as a free trip (spec 006 FR-010). ODsay always
+	// sets FareKnown, so its output is unchanged.
+	if !result.FareKnown {
+		if _, err := fmt.Fprint(stdout, "\n요금 정보 없음\n"); err != nil {
+			return 1
+		}
+		return 0
 	}
 	if _, err := fmt.Fprintf(stdout, "\n요금: %s원\n", withThousandsSeparator(result.Fare)); err != nil {
 		return 1

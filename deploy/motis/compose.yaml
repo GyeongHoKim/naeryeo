@@ -1,0 +1,77 @@
+# Self-hosted MOTIS for naeryeo.
+#
+# Verified end to end on 2026-08-03 against MOTIS 2.11.0 with the nationwide
+# KTDB GTFS feed and the Geofabrik South Korea extract: graph build 55 s,
+# 3.98 GiB peak RSS, 1.5 GB on disk. Read docs/self-hosting.md first — it covers
+# where the data comes from and what the numbers mean for your machine.
+#
+# Put the two input files in ./data (see docs/self-hosting.md section 3), then:
+#
+#   docker compose --profile import run --rm motis-import
+#   docker compose up -d motis-server
+
+services:
+  # One-shot graph build. Run it once per data refresh, not on every boot.
+  #
+  # After it finishes, `motis server` needs only ./data/graph — the osm.pbf and
+  # the GTFS zip can be deleted to reclaim about 500 MB, though keeping them
+  # makes the next re-import a download shorter.
+  motis-import:
+    # Pinned rather than :latest on purpose. A routing engine that silently
+    # changes version between the build and the serve is a debugging problem
+    # nobody wants; bumping this is a reviewed change.
+    #
+    # Note the tag has no "v" prefix: the git tag is v2.11.0, the image tag is
+    # 2.11.0. Pulling "v2.11.0" fails with "not found".
+    image: ghcr.io/motis-project/motis:2.11.0
+    working_dir: /data
+    volumes:
+      - ./data:/data
+      # Checked-in config rather than `motis config`, which would enable a
+      # 256 GB tile database this deployment has no use for. See config.yml.
+      #
+      # Mounted at / rather than into /data on purpose: a mount nested inside
+      # another bind mount makes Docker create a stray empty config.yml in the
+      # user's data directory, right next to the two files they were told to
+      # put there. The input paths inside it stay relative to working_dir.
+      - ./config.yml:/config.yml:ro
+    # The binary lives at /motis and is NOT on PATH, so a bare "motis" here
+    # fails with "executable file not found in $PATH".
+    entrypoint: ["/motis"]
+    command: ["import", "-d", "/data/graph", "-c", "/config.yml"]
+    profiles:
+      - import
+
+  motis-server:
+    image: ghcr.io/motis-project/motis:2.11.0
+    working_dir: /data
+    volumes:
+      - ./data:/data
+    entrypoint: ["/motis"]
+    command: ["server", "-d", "/data/graph"]
+    ports:
+      # Bound to loopback by default: the engine has no authentication, so it
+      # should not be reachable from the wider network without a deliberate
+      # decision. Change to "8080:8080" only if you understand that.
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      # MOTIS exposes no dedicated health endpoint, so a geocode query for a
+      # name any Korean dataset contains doubles as one — it proves the process
+      # is up AND that its index is loaded.
+      #
+      # 127.0.0.1, not localhost: the container resolves localhost to ::1 first
+      # and MOTIS listens on IPv4 only, so "localhost" yields connection refused
+      # and the container would sit permanently unhealthy.
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- 'http://127.0.0.1:8080/api/v1/geocode?text=%EC%84%9C%EC%9A%B8%EC%97%AD'
+          | grep -q '"lat"'
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # The graph is memory-mapped rather than parsed at boot, so the server
+      # answers within a few seconds of start. The allowance is for cold page
+      # cache on spinning disks.
+      start_period: 60s

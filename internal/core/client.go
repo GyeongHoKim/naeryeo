@@ -189,8 +189,14 @@ type RouteResult struct {
 	NoTravelNeeded bool
 	TotalTime      int // minutes
 	TransferCount  int
-	Fare           int // KRW
-	Steps          []RouteStep
+	Fare           int // KRW; meaningless unless FareKnown is true
+	// FareKnown reports whether the provider supplied a fare at all. It
+	// exists because zero is a legitimate fare, so it cannot double as "no
+	// data" — a self-hosted engine whose timetable carries no fare
+	// information would otherwise be indistinguishable from a free ride.
+	// Renderers must consult this before showing Fare.
+	FareKnown bool
+	Steps     []RouteStep
 }
 
 // RouteStep is one human-readable leg of a route.
@@ -387,7 +393,10 @@ func toRouteResult(p pathCandidate) RouteResult {
 		TotalTime:     p.Info.TotalTime,
 		TransferCount: transferCount(p.Info.SubwayTransitCount, p.Info.BusTransitCount),
 		Fare:          p.Info.Payment,
-		Steps:         steps,
+		// ODsay always returns a payment figure, so its results are always
+		// fare-bearing and this provider's rendering is unchanged.
+		FareKnown: true,
+		Steps:     steps,
 	}
 }
 

@@ -3,28 +3,25 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/GyeongHoKim/naeryeo/internal/config"
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 )
 
-// loadGeoPresent / loadGeoAbsent are the two geocoder-key states the route
-// entry point branches on for the FR-007 hint.
-func loadGeoPresent() (string, error) { return "kakao-key", nil }
-func loadGeoAbsent() (string, error)  { return "", config.ErrNotConfigured }
+// (legacy geocoder-key fixtures removed with the credential seam; see
+// testhelpers_test.go's geoPresent/geoAbsent)
+// // entry point branches on for the FR-007 hint.
 
 func TestRunRoute_Success(t *testing.T) {
-	load := func() (string, error) { return "test-key", nil }
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	findRoute := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 		return core.RouteResult{
 			TotalTime:     42,
 			TransferCount: 1,
 			Fare:          1500,
+			FareKnown:     true,
 			Steps: []core.RouteStep{
 				{Description: "강남역에서 2호선 승차 → 신도림역에서 하차"},
 				{Description: "신도림역에서 경의중앙선 승차 → 홍대입구역에서 하차"},
@@ -33,7 +30,7 @@ func TestRunRoute_Success(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 
 	if code != 0 {
 		t.Fatalf("runRoute() code = %d, want 0; stderr = %q", code, stderr.String())
@@ -128,14 +125,13 @@ func TestRouteErrorMessage(t *testing.T) {
 }
 
 func TestRunRoute_FR007Hint(t *testing.T) {
-	findNotFound := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	findNotFound := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 		return core.RouteResult{}, &core.ErrPointNotFound{Side: "from", Name: "아이디스 타워"}
 	}
-	load := func() (string, error) { return "test-key", nil }
 
 	t.Run("no geocoder key -> hint shown", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, load, loadGeoAbsent, findNotFound)
+		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, staticProvider(findNotFound), geoAbsent)
 		if !strings.Contains(stderr.String(), "setup --geocoder") {
 			t.Errorf("stderr = %q, want the FR-007 hint", stderr.String())
 		}
@@ -143,7 +139,7 @@ func TestRunRoute_FR007Hint(t *testing.T) {
 
 	t.Run("geocoder key present -> hint omitted", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, load, loadGeoPresent, findNotFound)
+		runRoute([]string{"--from", "아이디스 타워", "--to", "수지구청"}, &stdout, &stderr, staticProvider(findNotFound), geoPresent)
 		if strings.Contains(stderr.String(), "setup --geocoder") {
 			t.Errorf("stderr = %q, should not show the hint when a geocoder key exists", stderr.String())
 		}
@@ -151,14 +147,13 @@ func TestRunRoute_FR007Hint(t *testing.T) {
 }
 
 func TestRunRoute_DebugFlagAppendsRawErrorChain(t *testing.T) {
-	load := func() (string, error) { return "test-key", nil }
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	findRoute := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 		return core.RouteResult{}, &core.ErrGeocoderRejected{Status: 400, Code: "-10", Message: "limit"}
 	}
 
 	t.Run("--debug appends the raw error chain", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역", "--debug"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역", "--debug"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 		if !strings.Contains(stderr.String(), "[debug]") {
 			t.Errorf("stderr = %q, want the [debug] raw error chain", stderr.String())
 		}
@@ -166,7 +161,7 @@ func TestRunRoute_DebugFlagAppendsRawErrorChain(t *testing.T) {
 
 	t.Run("without --debug the raw chain is omitted", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+		runRoute([]string{"--from", "아이디스 타워", "--to", "강남역"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 		if strings.Contains(stderr.String(), "[debug]") {
 			t.Errorf("stderr = %q, should not include the raw chain without --debug", stderr.String())
 		}
@@ -182,8 +177,11 @@ const leakKey = "super/secret+odsay=key"
 // port. The resulting error is the genuine transport failure that used to
 // carry the ODsay API key (GYE-293) rather than a hand-built stand-in, so
 // these tests keep verifying the real thing if core's error wrapping changes.
-func deadUpstreamFindRoute(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-	client := core.NewClient(apiKey)
+func deadUpstreamFindRoute(ctx context.Context, from, to string) (core.RouteResult, error) {
+	// The key is closed over rather than passed in: since spec 006 the CLI
+	// layer never handles a credential, so the only way to model "a real
+	// client holding a real key hits a dead upstream" is from inside.
+	client := core.NewClient(leakKey)
 	client.BaseURL = "http://127.0.0.1:1"
 	return client.FindRoute(ctx, from, to)
 }
@@ -201,7 +199,6 @@ func assertNoAPIKey(t *testing.T, s, apiKey string) {
 // GYE-293's exit criteria. --debug matters most here: it prints the raw error
 // chain, so it is the path a presentation-layer-only fix would have missed.
 func TestRunRoute_TransportFailureNeverLeaksTheAPIKey(t *testing.T) {
-	load := func() (string, error) { return leakKey, nil }
 
 	for _, tt := range []struct {
 		name string
@@ -212,7 +209,7 @@ func TestRunRoute_TransportFailureNeverLeaksTheAPIKey(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
-			code := runRoute(tt.args, &stdout, &stderr, load, loadGeoAbsent, deadUpstreamFindRoute)
+			code := runRoute(tt.args, &stdout, &stderr, staticProvider(deadUpstreamFindRoute), geoAbsent)
 
 			if code != 1 {
 				t.Fatalf("runRoute() code = %d, want 1; stderr = %q", code, stderr.String())
@@ -241,13 +238,12 @@ func TestWithThousandsSeparator(t *testing.T) {
 }
 
 func TestRunRoute_NoTravelNeeded(t *testing.T) {
-	load := func() (string, error) { return "test-key", nil }
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	findRoute := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 		return core.RouteResult{NoTravelNeeded: true}, nil
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "강남역"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 
 	if code != 0 {
 		t.Fatalf("runRoute() code = %d, want 0; stderr = %q", code, stderr.String())
@@ -259,14 +255,13 @@ func TestRunRoute_NoTravelNeeded(t *testing.T) {
 
 func TestRunRoute_MissingFlags(t *testing.T) {
 	called := false
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	findRoute := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 		called = true
 		return core.RouteResult{}, nil
 	}
-	load := func() (string, error) { return "test-key", nil }
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+	code := runRoute([]string{"--from", "강남역"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 
 	if code == 0 {
 		t.Fatal("runRoute() code = 0, want non-zero")
@@ -277,21 +272,16 @@ func TestRunRoute_MissingFlags(t *testing.T) {
 }
 
 func TestRunRoute_APIKeyNotConfigured(t *testing.T) {
-	load := func() (string, error) { return "", config.ErrNotConfigured }
-	called := false
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-		called = true
-		return core.RouteResult{}, nil
-	}
+	// The key is resolved before the search now, so "not configured" arrives
+	// as a pre-flight failure and no finder is ever produced — which is itself
+	// the guarantee this test used to make with the `called` flag.
+	resolve := failingProvider(classifyRouteError(core.ErrAPIKeyMissing, true))
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, resolve, geoPresent)
 
 	if code == 0 {
 		t.Fatal("runRoute() code = 0, want non-zero")
-	}
-	if called {
-		t.Fatal("findRoute should not be called when the API key is not configured")
 	}
 	if !strings.Contains(stderr.String(), "naeryeo setup") {
 		t.Errorf("stderr = %q, want a hint to run naeryeo setup", stderr.String())
@@ -299,13 +289,12 @@ func TestRunRoute_APIKeyNotConfigured(t *testing.T) {
 }
 
 func TestRunRoute_AuthFailedIsDistinctFromMissingKey(t *testing.T) {
-	load := func() (string, error) { return "stored-but-invalid-key", nil }
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+	findRoute := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 		return core.RouteResult{}, core.ErrAuthFailed
 	}
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 
 	if code == 0 {
 		t.Fatal("runRoute() code = 0, want non-zero")
@@ -319,7 +308,6 @@ func TestRunRoute_AuthFailedIsDistinctFromMissingKey(t *testing.T) {
 }
 
 func TestRunRoute_ErrorMessages(t *testing.T) {
-	load := func() (string, error) { return "test-key", nil }
 
 	tests := []struct {
 		name     string
@@ -359,12 +347,12 @@ func TestRunRoute_ErrorMessages(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
+			findRoute := func(ctx context.Context, from, to string) (core.RouteResult, error) {
 				return core.RouteResult{}, tt.findErr
 			}
 
 			var stdout, stderr bytes.Buffer
-			code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+			code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, staticProvider(findRoute), geoPresent)
 
 			if code == 0 {
 				t.Fatal("runRoute() code = 0, want non-zero")
@@ -384,21 +372,17 @@ func TestRunRoute_ErrorMessages(t *testing.T) {
 // "API 키 조회 실패: %v" for a keychain that could not be read at all.
 func TestRunRoute_CredentialStoreErrorIsClassified(t *testing.T) {
 	const storeErr = "keyring: exec gpg: no such file or directory"
-	load := func() (string, error) { return "", errors.New(storeErr) }
-	called := false
-	findRoute := func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error) {
-		called = true
-		return core.RouteResult{}, nil
-	}
+	// The raw keychain string must not reach the user: the resolver reports a
+	// classified failure instead, and this test pins that the original text is
+	// nowhere in the output. No finder is produced at all, which is a stronger
+	// guarantee than the old "findRoute was not called" flag.
+	resolve := failingProvider(credentialStoreFailure())
 
 	var stdout, stderr bytes.Buffer
-	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, load, loadGeoPresent, findRoute)
+	code := runRoute([]string{"--from", "강남역", "--to", "홍대입구역"}, &stdout, &stderr, resolve, geoPresent)
 
 	if code != 1 {
 		t.Fatalf("code = %d, want 1", code)
-	}
-	if called {
-		t.Error("findRoute was called despite the credential store failing")
 	}
 	if strings.Contains(stderr.String(), storeErr) {
 		t.Errorf("stderr leaked the keychain error:\n%s", stderr.String())

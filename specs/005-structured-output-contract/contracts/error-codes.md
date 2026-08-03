@@ -67,9 +67,27 @@
 **허용 목록**: `core.ErrGeocoderNotFound` — `Geocoder` 인터페이스 계약 sentinel이며
 `resolveStation`이 `*ErrPointNotFound`로 접어 표현 계층에 도달하지 않는다.
 
-## 향후 확장
+## 확장 이력
 
-- `provider_not_configured` — GYE-294가 설정 파일 부재 상태를 도입할 때 추가
-- `motis_*`, `docs` 필드 — GYE-295가 대체 경로 제공자를 도입할 때 추가
+아래는 이 문서가 "향후 확장"으로 예고했던 항목이며, **spec 006(자체 호스팅 경로 검색
+제공자)에서 실현되었다**. 정본은 그쪽 delta 문서다 —
+[specs/006-self-hosted-routing-provider/contracts/error-codes.md](../../006-self-hosted-routing-provider/contracts/error-codes.md).
 
-둘 다 이번 범위 밖이다 (spec Assumptions). 추가 시 위 게이트가 코드 부여를 강제한다.
+| 코드 | 실현 위치 |
+| --- | --- |
+| `provider_not_configured` | spec 006 (설정 파일 부재·미인식 provider) |
+| `motis_unavailable` | spec 006 (자체 호스팅 엔진 연결 불가) |
+| `motis_rejected` | spec 006 (자체 호스팅 엔진이 요청 처리 불가) |
+| `docs` 필드 | spec 006 (위 세 코드에 self-hosting 문서 URL을 실어 보냄) |
+
+예고대로 이 문서의 망라성 게이트가 코드 부여를 강제했다 — `internal/core`에
+`ErrMotisUnavailable`·`ErrMotisRejected`를 추가한 시점에
+`TestErrorCodeExhaustive_EveryCoreErrorHasACode`가 실패했고, taxonomy 등록으로 해소했다.
+
+### 기존 코드에 생긴 의미 변화 2건
+
+- **`api_key_missing`의 범위가 좁아졌다.** 이제 "ODsay를 선택했는데 키가 없음"만 뜻한다.
+  "아무 제공자도 설정되지 않음"은 `provider_not_configured`가 가져갔다.
+- **`fareWon`의 부재 의미가 바뀌었다.** 이 문서가 다루는 실패 계약은 그대로지만, 성공
+  문서에서 `fareWon` 부재는 이제 "0원"이 아니라 **"제공자가 요금 정보를 주지 않음"**이다.
+  값이 0인 요금은 `"fareWon": 0`으로 명시된다. `transferCount`는 종전대로 "부재 = 0"이다.

@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
-	"github.com/GyeongHoKim/naeryeo/internal/config"
 	"github.com/GyeongHoKim/naeryeo/internal/core"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -33,7 +31,7 @@ type RouteToolOutput struct {
 	NoTravelNeeded   bool        `json:"noTravelNeeded,omitempty" jsonschema:"true면 출발지와 도착지가 사실상 같은 위치라 이동이 필요 없음"`
 	TotalTimeMinutes int         `json:"totalTimeMinutes,omitempty" jsonschema:"총 소요시간(분)"`
 	TransferCount    int         `json:"transferCount,omitempty" jsonschema:"환승 횟수"`
-	FareWon          int         `json:"fareWon,omitempty" jsonschema:"예상 요금(원)"`
+	FareWon          *int        `json:"fareWon,omitempty" jsonschema:"예상 요금(원). 제공자가 요금 정보를 주지 않으면 이 필드 자체가 없다 — 0원으로 채우지 않는다"`
 	Steps            []string    `json:"steps,omitempty" jsonschema:"순서대로 나열된 단계별 이동 안내"`
 	Error            *RouteError `json:"error,omitempty" jsonschema:"실패 시에만 존재. 있으면 나머지 필드는 비어 있음"`
 }
@@ -47,6 +45,7 @@ type RouteError struct {
 	Hint    string `json:"hint,omitempty" jsonschema:"사용자가 취해야 할 조치가 있을 때만 존재"`
 	Side    string `json:"side,omitempty" jsonschema:"point_not_found 전용. from/to/both"`
 	Name    string `json:"name,omitempty" jsonschema:"point_not_found 전용. 인식하지 못한 입력값"`
+	Docs    string `json:"docs,omitempty" jsonschema:"사용자가 직접 해결해야 하는 실패일 때만 존재하는 문서 URL. 있으면 사용자에게 그대로 전달한다"`
 }
 
 // toRouteToolOutput maps a core.RouteResult onto the envelope's success shape.
@@ -67,25 +66,32 @@ func toRouteToolOutput(result core.RouteResult) RouteToolOutput {
 	for _, step := range result.Steps {
 		steps = append(steps, step.Description)
 	}
-	return RouteToolOutput{
+	out := RouteToolOutput{
 		TotalTimeMinutes: result.TotalTime,
 		TransferCount:    result.TransferCount,
-		FareWon:          result.Fare,
 		Steps:            steps,
 	}
+	// A pointer, not a zero int: omitempty on an int cannot tell "no fare
+	// data" from "the fare is 0", and a provider without fare information
+	// must not be reported as free (spec 006 FR-010). When the fare IS known
+	// the wire format is unchanged, so the success schema stays stable.
+	if result.FareKnown {
+		fare := result.Fare
+		out.FareWon = &fare
+	}
+	return out
 }
 
 // routeToolHandler builds the find_transit_route tool handler, closing over
-// load/findRoute so it can be exercised by tests with fakes and wired to
-// the real internal/config + internal/core in main.go. logger receives one
+// the provider resolver so it can be exercised by tests with fakes and wired
+// to the real settings + credentials in main.go. logger receives one
 // completion-time log per tool call; a nil logger discards it (a fresh
 // slog.New(slog.DiscardHandler) is used in that case, mirroring
 // internal/core.Client's nil-defaulting Logger field).
 func routeToolHandler(
 	logger *slog.Logger,
-	load func() (string, error),
-	loadGeocoder func() (string, error),
-	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
+	resolve providerResolver,
+	geocoderConfigured func() bool,
 ) mcp.ToolHandlerFor[RouteToolInput, RouteToolOutput] {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -108,20 +114,17 @@ func routeToolHandler(
 			)
 		}()
 
-		apiKey, loadErr := load()
-		if loadErr != nil && !errors.Is(loadErr, config.ErrNotConfigured) {
-			// Previously this wrapped loadErr and returned it, sending the raw
-			// keychain error string to the AI caller. It now travels as a coded
-			// failure like every other one (spec 005 FR-018).
-			return failureToolResult(credentialStoreFailure())
+		// The same resolver the CLI uses, so both entry points necessarily
+		// agree on the provider and answer identically when none is
+		// configured, a key is missing, or the keychain cannot be read.
+		findRoute, preflight := resolve()
+		if preflight != nil {
+			return failureToolResult(*preflight)
 		}
 
-		// If loadErr is config.ErrNotConfigured, apiKey is "" and findRoute
-		// (backed by core.Client.FindRoute) returns ErrAPIKeyMissing itself —
-		// no separate "not configured" branch is needed here.
-		routeResult, findErr := findRoute(ctx, apiKey, in.From, in.To)
+		routeResult, findErr := findRoute(ctx, in.From, in.To)
 		if findErr != nil {
-			return failureToolResult(classifyRouteError(findErr, geocoderConfigured(loadGeocoder)))
+			return failureToolResult(classifyRouteError(findErr, geocoderConfigured()))
 		}
 		return nil, toRouteToolOutput(routeResult), nil
 	}
@@ -158,22 +161,21 @@ func failureToolResult(f failure) (*mcp.CallToolResult, RouteToolOutput, error) 
 }
 
 // buildMCPServer assembles the MCP server and registers the
-// find_transit_route tool. It takes load/findRoute as parameters (same
-// shape as runRoute's) so it can be unit- and end-to-end-tested without
-// touching internal/config or a real ODsay call. logger is also wired into
+// find_transit_route tool. It takes the same resolver runRoute does, so it can
+// be unit- and end-to-end-tested without touching internal/config or a real
+// upstream call — and so both entry points cannot diverge. logger is also wired into
 // mcp.ServerOptions so the SDK's own session-lifecycle logs are captured.
 func buildMCPServer(
 	version string,
 	logger *slog.Logger,
-	load func() (string, error),
-	loadGeocoder func() (string, error),
-	findRoute func(ctx context.Context, apiKey, from, to string) (core.RouteResult, error),
+	resolve providerResolver,
+	geocoderConfigured func() bool,
 ) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "naeryeo", Version: version}, &mcp.ServerOptions{Logger: logger})
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "find_transit_route",
 		Description: "대한민국 대중교통(지하철·버스·시외버스)으로 두 지점 사이의 경로를 검색한다.",
-	}, routeToolHandler(logger, load, loadGeocoder, findRoute))
+	}, routeToolHandler(logger, resolve, geocoderConfigured))
 	if logger != nil {
 		logger.Info("mcp: server initialized", "name", "naeryeo", "version", version)
 	}
