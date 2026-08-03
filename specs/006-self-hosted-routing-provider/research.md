@@ -472,3 +472,31 @@ JSON에서 `fareWon` 키 **부재**를 실측 확인했다(FR-010/FR-011).
 
 **실패 경로 실증**(엔진 정지 후): `motis_unavailable` 코드, `docs` 링크 포함,
 프로즈 3줄(message/hint/docs), 출력 전체에 `localhost`·`8080` **0건**(SC-006).
+
+**MCP 진입점도 실엔진으로 확인했다**(SC-005). 여기까지의 검증이 전부 `route` CLI를 통한
+것이었고 MCP 쪽은 T023 단위 테스트("두 진입점이 같은 제공자를 쓴다")로만 담보돼 있었다.
+`naeryeo mcp`에 stdio로 `initialize` → `tools/call find_transit_route`를 직접 흘려 넣어
+같은 엔진에서 응답을 받았다.
+
+```json
+{"steps": ["출발지에서 신논현까지 도보 이동 (9분)",
+           "신논현에서 서울9호선 승차 → 당산에서 하차", ...],
+ "totalTimeMinutes": 36, "transferCount": 1}
+```
+
+`fareWon` 키 **부재**(FR-010/FR-011)와 `START`/`END` 치환이 CLI뿐 아니라 MCP
+`structuredContent`에서도 성립함을 이로써 확인했다. 두 계약 모두 그동안 CLI 경로에서만
+실측돼 있었다.
+
+**`motis_rejected`를 naeryeo를 통해서도 재현했다.** 그전까지는 적재 창 밖 질의를 curl로
+직접 쳐서 400을 본 것이 전부였고, 이는 R12에서 밝혔듯 **사용자가 도달할 수 없는 경로**다.
+문서에 새로 쓴 "주소가 MOTIS 서버가 아닌 경우"를 검증하기 위해 루프백에 MOTIS가 아닌 HTTP
+서버를 띄우고 두 단계를 확인했다.
+
+| 단계 | 결과 |
+| --- | --- |
+| `setup --motis-url=<비-MOTIS>` | 저장 **거부** — "엔진이 요청을 거부했습니다. 주소가 MOTIS 서버가 맞는지 확인하세요" + docs 링크. **기존 설정 파일은 그대로 유지**됐다 |
+| setup 우회 후 `route` | `motis_rejected` + docs 링크, 프로즈 3줄. 출력에 호스트·포트 **0건** |
+
+setup 거부 문구는 `docs/self-hosting.md` §5에, 검색 시점 동작은 §8-B에 적어 둔 그대로다 —
+문서가 실제 출력과 일치함을 확인한 셈이다.
