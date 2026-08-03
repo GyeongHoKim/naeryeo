@@ -443,6 +443,29 @@ func TestDescribeLeg(t *testing.T) {
 			leg:  leg{Mode: "RAIL", From: place{Name: "A"}, To: place{Name: "B"}, Duration: 300},
 			want: "A에서 B까지 이동 (5분)",
 		},
+		// A real engine labels the ends of a journey "START" and "END" rather
+		// than echoing the query, so these two cases are what an actual walk
+		// leg looks like — not a synthetic edge case.
+		{
+			name: "the origin is named rather than left as START",
+			leg:  leg{Mode: "WALK", From: place{Name: "START"}, To: place{Name: "강남"}, Duration: 480},
+			want: "출발지에서 강남까지 도보 이동 (8분)",
+		},
+		{
+			name: "the destination is named rather than left as END",
+			leg:  leg{Mode: "WALK", From: place{Name: "홍대입구"}, To: place{Name: "END"}, Duration: 60},
+			want: "홍대입구에서 도착지까지 도보 이동 (1분)",
+		},
+		{
+			name: "a transit leg between the two ends is named too",
+			leg:  leg{Mode: "SUBWAY", RouteShortName: "9호선", From: place{Name: "START"}, To: place{Name: "END"}},
+			want: "출발지에서 9호선 승차 → 도착지에서 하차",
+		},
+		{
+			name: "a stop that merely contains START keeps its own name",
+			leg:  leg{Mode: "WALK", From: place{Name: "STARTUP빌딩"}, To: place{Name: "END역"}, Duration: 120},
+			want: "STARTUP빌딩에서 END역까지 도보 이동 (2분)",
+		},
 	}
 
 	for _, tt := range tests {

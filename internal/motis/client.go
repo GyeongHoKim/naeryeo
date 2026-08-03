@@ -337,8 +337,8 @@ func secondsToMinutes(seconds float64) int {
 // phrasing follows internal/core's ODsay descriptions so a user cannot tell
 // which engine answered from the shape of the output.
 func describeLeg(l leg) string {
-	fromName := strings.TrimSpace(l.From.Name)
-	toName := strings.TrimSpace(l.To.Name)
+	fromName := placeName(l.From.Name)
+	toName := placeName(l.To.Name)
 	minutes := secondsToMinutes(l.Duration)
 
 	if strings.EqualFold(l.Mode, "WALK") {
@@ -364,6 +364,23 @@ func serviceName(l leg) string {
 		}
 	}
 	return ""
+}
+
+// placeName renders a leg endpoint. MOTIS labels the two ends of a journey
+// with the literal strings "START" and "END" rather than with the query the
+// user typed, and those leaked verbatim into Korean sentences — "START에서
+// 강남까지 도보 이동". Only a real self-hosted engine surfaces this: the test
+// fixtures name every endpoint, and the ODsay path has no equivalent.
+func placeName(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	switch trimmed {
+	case "START":
+		return "출발지"
+	case "END":
+		return "도착지"
+	default:
+		return trimmed
+	}
 }
 
 func isBus(mode string) bool {
