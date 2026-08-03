@@ -30,10 +30,18 @@ transfers, fare, and human-readable step-by-step directions.
 Both answer with the same document shape, so **you do not change how you call
 naeryeo based on which one is configured**.
 
-Both providers resolve station and stop names on their own. To also accept
-building names and street addresses (e.g. "아이디스 타워"), naeryeo can resolve
-them via the Kakao Local API when an optional place-search key is configured —
-that setting is independent of the routing provider.
+What each provider can resolve on its own differs, and it decides whether the
+optional Kakao place-search key is worth suggesting:
+
+| Provider | Station/stop names | Building names, street addresses |
+| --- | --- | --- |
+| Self-hosted (MOTIS) | Yes | **Yes** — its index covers OSM places and addresses |
+| ODsay | Yes | No — needs the Kakao key |
+
+So for a self-hosting user, a building name like "아이디스 타워" or an address
+like "테헤란로 152" already works with no place-search key at all. The key is a
+fallback for names their map data does not have, not a prerequisite. That
+setting stays independent of the routing provider either way.
 
 > **Never install, configure, or start a MOTIS engine on the user's behalf
 > without their explicit request.** Self-hosting means downloading gigabytes of
@@ -100,8 +108,16 @@ separate logout command.)
 
 ### 3. (Optional) Store the place-search key for building/address queries
 
-Station and stop names work with either provider on their own. To let the user
-ask by **building name or street address**, store a Kakao REST API key as well.
+Check the provider before suggesting this — it is **not** needed for
+self-hosting.
+
+- **Self-hosted (MOTIS)**: skip this. Building names and addresses already
+  resolve from the engine's own index. Only suggest the key if a specific name
+  fails with `point_not_found` and the user wants broader coverage of new or
+  minor places.
+- **ODsay**: needed if the user wants to ask by **building name or street
+  address**. Without it only station and stop names resolve.
+
 Have the user create an app and REST API key at <https://developers.kakao.com>,
 then run:
 
@@ -111,8 +127,7 @@ echo "$KAKAO_KEY" | naeryeo setup --geocoder=kakao
 
 This key is a **separate** OS-keychain entry with the same protections. Turn it
 off with `naeryeo setup --geocoder=none`, or delete it with
-`naeryeo setup --delete=kakao`. Without it, station/stop lookups still work and
-building/address queries report that the place was not found.
+`naeryeo setup --delete=kakao`.
 
 ## Usage
 
@@ -247,9 +262,14 @@ pointless retry loop or telling the user to redo something that cannot help.
 - **`noTravelNeeded` is a success, not a failure.** It means the two points are
   close enough that no trip is needed — do not report it as "no route found"
   (that is `no_route`).
-- **Building names and addresses need the place-search key** (Prerequisites §3).
-  Without it only station and stop names resolve; a building name returns
-  `point_not_found` plus a `hint` to run `naeryeo setup --geocoder=kakao`.
+- **Whether a building name needs the place-search key depends on the provider**
+  (Prerequisites §3). On self-hosted MOTIS it does not — buildings and addresses
+  resolve from the engine's own index, so `point_not_found` there means the name
+  is genuinely absent from their map data, and telling the user to buy a Kakao
+  key is wrong advice. On ODsay it does: without the key only station and stop
+  names resolve, and a building name returns `point_not_found` plus a `hint` to
+  run `naeryeo setup --geocoder=kakao`. Follow the `hint` in the payload rather
+  than assuming.
 - **Do not set up a self-hosted engine for the user.** `motis_unavailable` means
   *their* server is down, not that you should install one. Relay the `docs` link.
 - **A missing `fareWon` is not a free trip.** See the success-document notes.

@@ -132,19 +132,30 @@ description: "Task list for 006-self-hosted-routing-provider"
 > US2의 산출물은 문서이므로 자동 테스트가 성립하지 않는다. 대신 수용 기준을 문서 자체에
 > 고정하고 T043의 제3자 검증으로 확인한다.
 
-- [ ] T035 [P] [US2] quickstart.md S3의 확인 항목 5개를 `docs/self-hosting.md` 완료 판정 체크리스트로 문서 말미에 명시한다 — 문서 자체의 수용 기준이므로 자동 테스트 대신 검증 절차로 고정한다
+- [X] T035 [P] [US2] quickstart.md S3의 확인 항목 5개를 `docs/self-hosting.md` 완료 판정 체크리스트로 문서 말미에 명시한다 — 문서 자체의 수용 기준이므로 자동 테스트 대신 검증 절차로 고정한다
 
 ### Implementation for User Story 2
 
-- [ ] T036 [US2] MOTIS 컨테이너를 1회 기동해 `motis config <osm.pbf> <gtfs.zip>`이 생성하는 `config.yml`의 실제 스키마를 확인하고 research.md U1을 해소한다
-- [ ] T037 [US2] KTDB GTFS의 공식 확보 경로·갱신 주기·지역 커버리지를 확인해 research.md U3을 해소한다 — Transitous의 Dropbox 링크는 **참고**로만 두고 원본 경로를 1순위로 삼는다 (research.md R7)
+- [X] T036 [US2] MOTIS 컨테이너를 1회 기동해 `motis config <osm.pbf> <gtfs.zip>`이 생성하는 `config.yml`의 실제 스키마를 확인하고 research.md U1을 해소한다
+- [X] T037 [US2] KTDB GTFS의 공식 확보 경로·갱신 주기·지역 커버리지를 확인해 research.md U3을 해소한다 — Transitous의 Dropbox 링크는 **참고**로만 두고 원본 경로를 1순위로 삼는다 (research.md R7)
 - [X] T038 [US2] `deploy/motis/compose.yaml`을 작성한다 — 이미지 태그 **고정**(`latest` 금지), import와 server를 분리한 2단계 구성, GTFS/OSM은 호스트 바인드 마운트로 교체 가능하게
-- [ ] T039 [US2] 실제 그래프 빌드를 1회 수행하며 소요 시간·최대 RSS·디스크 사용량을 계측해 research.md U2를 해소한다 (spec FR-023의 직접 입력)
-- [ ] T040 [US2] `docs/self-hosting.md`를 완성한다 — 데이터 확보처, 실행 절차, naeryeo 연결 방법(`naeryeo setup --provider=motis --motis-url=...`), T039의 실측 자원 요구치 (spec FR-021, FR-022, FR-023)
-- [ ] T041 [US2] `docs/self-hosting.md`에 데이터 한계 절을 추가한다 — GTFS 갱신 주기, 실시간 정보 부재, 지역 커버리지, 상용 서비스와 결과가 다를 수 있음 (spec FR-024, Assumptions)
-- [ ] T041a [US2] `docs/self-hosting.md`와 `README.md`에 **잔여 외부 의존** 절을 추가한다 — 경로 검색은 자체 호스팅으로 외부 의존이 사라지지만 건물명·주소 검색은 여전히 외부 장소 검색 서비스를 쓴다는 점, 역·정류장 이름만 쓰면 그 의존조차 없다는 점, 그 선택이 제공자와 독립이라는 점 (spec FR-029, FR-030). T041의 데이터 한계 절과는 **분리된 절**로 쓴다 — 하나는 데이터의 품질·범위, 다른 하나는 의존성 축을 다룬다
+- [X] T039 [US2] 실제 그래프 빌드를 1회 수행하며 소요 시간·최대 RSS·디스크 사용량을 계측해 research.md U2를 해소한다 (spec FR-023의 직접 입력)
+- [X] T040 [US2] `docs/self-hosting.md`를 완성한다 — 데이터 확보처, 실행 절차, naeryeo 연결 방법(`naeryeo setup --provider=motis --motis-url=...`), T039의 실측 자원 요구치 (spec FR-021, FR-022, FR-023)
+- [X] T041 [US2] `docs/self-hosting.md`에 데이터 한계 절을 추가한다 — GTFS 갱신 주기, 실시간 정보 부재, 지역 커버리지, 상용 서비스와 결과가 다를 수 있음 (spec FR-024, Assumptions)
+- [X] T041a [US2] `docs/self-hosting.md`와 `README.md`에 **잔여 외부 의존** 절을 추가한다 — 경로 검색은 자체 호스팅으로 외부 의존이 사라지지만 건물명·주소 검색은 여전히 외부 장소 검색 서비스를 쓴다는 점, 역·정류장 이름만 쓰면 그 의존조차 없다는 점, 그 선택이 제공자와 독립이라는 점 (spec FR-029, FR-030). T041의 데이터 한계 절과는 **분리된 절**로 쓴다 — 하나는 데이터의 품질·범위, 다른 하나는 의존성 축을 다룬다
 - [X] T042 [US2] `README.md`를 개편한다 — 제공자 개념 도입, 자체 호스팅을 **1순위 경로**로 서술, ODsay는 동등한 대안으로, `logout` 안내 제거(`README.md:172-173`), `--json` 문서화, `docs/self-hosting.md` 링크 (spec FR-025, FR-035, FR-037)
-- [ ] T043 [US2] 제3자에게 문서만 주고 구축을 시켜 quickstart.md S3의 5개 항목을 검증하고 결과를 기록한다 (spec SC-003, SC-004)
+- [X] T043 [US2] 제3자에게 문서만 주고 구축을 시켜 quickstart.md S3의 5개 항목을 검증하고 결과를 기록한다 (spec SC-003, SC-004)
+  - **방법**: 문서 작성자와 분리된 리뷰 에이전트에게 `docs/self-hosting.md`만 읽게 하고(소스·README·specs 접근 금지), 문서 밖 지식이 필요한 지점을 세게 했다. 17건 지적(BLOCKER 4, MAJOR 7, MINOR 6).
+  - **1차 판정 결과**: 항목 1(문서 밖 지식 0건) **불합격** — 저장소 체크아웃 필요성 미기재, `data/` 디렉터리 생성 단계 누락, 상대 경로의 기준점 미명시, 바이너리 설치 안내 부재.
+  - **수정 완료**: §2-1(체크아웃·빌드·Docker 요건) 신설, `mkdir -p deploy/motis/data` 추가, "모든 명령은 저장소 최상위에서" 전역 규칙 명시, GTFS 리네임 명령·내용 검증법 추가, OSM `curl -f` 및 크기 확인 추가, 메모리 권장치 4 GiB→**8 GB**(실측 3.98 GiB에 여유 없음), 다운로드에 이미지 215 MB 반영, import 성공 판정 기준 추가, `(health: starting)` 타이밍 설명, §8-A(빌드 단계 실패: OOM·디스크·포트 충돌·파일명·불완전 다운로드) 신설, 재빌드 시 **서버 선정지** 순서 수정, 원본 삭제 팁에 재신청 비용 경고 연결, §9의 재현성 주장을 "엔진은 고정·데이터는 미고정"으로 정정.
+  - **기각 1건**: "`localhost` 대신 `127.0.0.1`을 쓰라"(MAJOR 주장)는 실측 기각. IPv6 우선 해석 문제는 **컨테이너 내부 healthcheck에 한정**되며 이미 수정돼 있다. 호스트에서 `localhost:8080`은 curl·naeryeo 모두 200으로 동작하고, 도구 기본값(`defaultMotisURL`)도 `localhost`라 문서만 바꾸면 오히려 불일치가 생긴다.
+  - **2차 검증(사실 대조)**: 별도 에이전트가 문서의 모든 주장을 소스·실엔진과 대조해 9건을 추가로 찾았다. 전부 자체 실측으로 재확인 후 반영.
+    - **§7이 거짓이었다(MAJOR)**: "건물명·주소 검색은 Kakao 키가 있어야 동작한다"는 서술이 사실과 다르다. MOTIS 색인은 OSM의 건물(`type=PLACE`)·주소(`type=ADDRESS`)까지 담아, `--geocoder=none`에서 `아이디스 타워 → 수지구청`(51분)·`테헤란로 152 → 강남역`(11분)이 그대로 동작한다. `README.md`에도 같은 오류가 있어 함께 고쳤다. 자체 호스팅의 가치를 실제보다 약하게 적고 있던 셈이다(research.md R13 갱신).
+    - **§6의 인과가 반대였다(MAJOR)**: "route_type 오표기 탓에 KTX에서 '버스'가 빠진다"고 썼으나, `describeLeg`는 `isBus()`일 때만 수단 이름을 붙이므로 KTX·지하철은 원래 노선명만 나온다. 실제 피해자는 **버스로 표기되지 않은 시내버스**(`6900 승차`)다.
+    - **§8 `motis_rejected` 진단이 도달 불가 경로였다(MAJOR)**: "질의 날짜가 창을 벗어난 경우"라고 했으나 naeryeo에는 날짜 옵션이 없다(`route.go`는 `--from/--to/--debug/--json`뿐, plan URL에 `time` 미포함). 실제 발생 경로는 (가) 주소가 MOTIS가 아님(200이지만 디코드 실패 → `client.go:156-162`도 이 코드) (나) 그래프 만료. 둘 다로 다시 썼다.
+    - MINOR 5건: `route_type` 6=곤돌라(KTX·SRT)·7=강삭철도(항공)로 정정, Compose 버전 `v2`→실측 `v5.1.2`, 적재 창 `365일`→실측 366일(빌드 전날 00시 시작), `point_not_found` 코드명 명시(§8이 "코드별 정리"라면서 이 코드만 이름이 없었다), setup의 미문서화 거부 2종(`엔진에 연결할 수 없습니다`/`주소가 MOTIS 서버가 맞는지`) 추가.
+  - **미해소**: SC-003의 "사람인 제3자" 조건은 여전히 미충족. 릴리스 전 실사용자 1명의 구축을 권장한다.
+  - **릴리스 전 주의**: `selfHostingDocsURL`이 가리키는 `blob/main/docs/self-hosting.md`는 이 브랜치가 병합되기 전까지 404다. 실패 출력에 실리는 링크이므로 병합 전 릴리스 금지.
 
 **Checkpoint**: US2 완료 — 문서만으로 자체 호스팅 환경을 구축할 수 있다
 
@@ -170,7 +181,9 @@ description: "Task list for 006-self-hosted-routing-provider"
 
 - [X] T048 [US3] `cmd/naeryeo/route.go`에 `newRouteFinder`가 반환한 사전 실패(`provider_not_configured` 등)를 검색 시도 **이전에** 프로즈·JSON 양쪽으로 보고하는 경로를 구현한다 (contracts/cli-interface.md)
 - [X] T049 [US3] `cmd/naeryeo/mcp.go`의 툴 핸들러에 동일한 사전 실패 경로를 구현한다 — `failureToolResult`를 재사용해 구조화된 코드가 `structuredContent`로 전달되게 한다
-- [ ] T050 [US3] 만료된(과거 날짜만 있는) 타임테이블에서 MOTIS `plan`이 어떤 응답을 주는지 실측해 research.md U4를 해소하고, 필요하면 제공자가 MOTIS일 때만 `no_route`의 hint에 "시간표 데이터가 최신인지 확인" 문구를 덧붙인다 (spec FR-016)
+- [X] T050 [US3] 만료된(과거 날짜만 있는) 타임테이블에서 MOTIS `plan`이 어떤 응답을 주는지 실측해 research.md U4를 해소하고, 필요하면 제공자가 MOTIS일 때만 `no_route`의 hint에 "시간표 데이터가 최신인지 확인" 문구를 덧붙인다 (spec FR-016)
+  - 실측 완료(research.md R12): 만료 시간표는 `import`가 경고 없이 통과하고 `plan`이 HTTP 200 + 빈 결과를 반환 → `no_route`. 적재 창 밖 시각은 HTTP 400 → `motis_rejected`.
+  - **코드 변경은 하지 않기로 결정.** hint를 제공자별로 가르려면 `classifyRouteError`가 제공자를 알아야 하고 이는 테스트 포함 12개 호출부에 파급된다. 반면 실제 배포되는 KTDB 피드는 `calendar.txt`가 2030년까지라 이 경로를 타지 않는다. 대신 `docs/self-hosting.md` §8의 `no_route` 항목에 "다른 질의도 전부 no_route라면 GTFS부터 의심하라"를 명시했다.
 
 **Checkpoint**: US3 완료 — 자체 호스팅 실패가 코드·문구·문서 링크로 진단 가능하고 내부망 정보가 새지 않는다
 
@@ -199,7 +212,7 @@ description: "Task list for 006-self-hosted-routing-provider"
 - [X] T058 [US4] `cmd/naeryeo/logout.go`와 `cmd/naeryeo/logout_test.go`를 삭제하고, `cmd/naeryeo/main.go`의 `logout` 케이스(`main.go:149`)와 usage 문자열(`main.go:197`)을 갱신한다 (spec FR-035 — 삭제 전용 최상위 명령 제거)
 - [X] T059 [US4] `cmd/naeryeo/setup.go`에 `--geocoder`를 구버전 형식(값 없는 bool)으로 호출했을 때 "이제 `--geocoder=kakao` 형태로 지정해야 합니다"라는 마이그레이션 안내를 출력하도록 한다 — 조용히 실패해서는 안 된다 (spec FR-036, contracts/cli-interface.md)
 - [X] T060 [US4] `README.md`에 마이그레이션 안내 절을 추가한다 — "업그레이드 후 `naeryeo setup`을 한 번 다시 실행해야 합니다"와 그 이유, 저장된 키는 삭제되지 않고 재사용된다는 점, 그리고 FR-034가 요구하는 세 가지 breaking change(제공자 재설정 강제 / 삭제 전용 명령 제거 / 장소 검색 플래그 형태 변경) (spec FR-034)
-- [ ] T060a [US4] 릴리스 노트에 breaking change가 실리도록 보장한다. 이 저장소는 `@semantic-release/changelog`를 쓰지 않고 `release-notes-generator`가 **커밋 메시지에서** 노트를 생성하므로(`.releaserc.json`), CHANGELOG 파일을 만드는 대신 해당 변경을 담은 커밋에 `BREAKING CHANGE:` 푸터를 넣어야 한다 — FR-034의 세 항목 각각에 "무엇을 해야 하는가"를 한 줄씩 포함한다. T069의 커밋 메시지 제안에 이 푸터가 포함되어야 하며, commitlint를 통과하는지 확인한다 (spec FR-034, 헌법 원칙 IV)
+- [X] T060a [US4] 릴리스 노트에 breaking change가 실리도록 보장한다. 이 저장소는 `@semantic-release/changelog`를 쓰지 않고 `release-notes-generator`가 **커밋 메시지에서** 노트를 생성하므로(`.releaserc.json`), CHANGELOG 파일을 만드는 대신 해당 변경을 담은 커밋에 `BREAKING CHANGE:` 푸터를 넣어야 한다 — FR-034의 세 항목 각각에 "무엇을 해야 하는가"를 한 줄씩 포함한다. T069의 커밋 메시지 제안에 이 푸터가 포함되어야 하며, commitlint를 통과하는지 확인한다 (spec FR-034, 헌법 원칙 IV)
 
 **Checkpoint**: US4 완료 — 기존 사용자가 안내를 따라 1회 재설정으로 복구된다
 
@@ -214,9 +227,9 @@ description: "Task list for 006-self-hosted-routing-provider"
 - [X] T063 [P] `skills/naeryeo/SKILL.md`의 `naeryeo logout`(`:67`)·`naeryeo logout --geocoder`(`:81`) 언급을 제거하고 `setup --delete` 형식으로 교체한다
 - [X] T064 [P] `specs/005-structured-output-contract/contracts/error-codes.md`의 "향후 확장" 절(`:70-75`)을 갱신해 `provider_not_configured`·`motis_*`·`docs`가 실현되었음을 명시하고 이 기능의 contracts/error-codes.md를 가리키게 한다
 - [X] T065 provider × geocoder 4개 조합(motis×none, motis×kakao, odsay×none, odsay×kakao)이 모두 동작함을 검증하는 테스트를 추가한다 — 특히 **motis×none에서 역·정류장 이름 검색이 외부 호출 없이 동작**하는 것이 이 기능의 핵심 주장이다 (spec FR-030, SC-002, quickstart.md S6). 4개 조합 모두에 **동일한 인자**(`--from`, `--to`)를 주어 호출하고, 호출 형태가 제공자에 따라 달라지지 않음을 단언한다 (spec FR-012)
-- [ ] T066 quickstart.md S2를 수행한다 — 실 MOTIS로 대표 질의 3종(강남역→홍대입구역, 서면역→해운대역, 대전역→광주송정역)을 실행하고 결과를 기록한다. 실패하는 질의가 있으면 커버리지 한계로 `docs/self-hosting.md`에 명시한다 (spec SC-007, research.md U5 해소)
+- [X] T066 quickstart.md S2를 수행한다 — 실 MOTIS로 대표 질의 3종(강남역→홍대입구역, 서면역→해운대역, 대전역→광주송정역)을 실행하고 결과를 기록한다. 실패하는 질의가 있으면 커버리지 한계로 `docs/self-hosting.md`에 명시한다 (spec SC-007, research.md U5 해소)
 - [ ] T067 3개 OS(linux/macOS/windows) CI에서 `just check`가 전부 green임을 확인한다 — 설정 파일 경로가 OS별로 갈리므로 이 매트릭스가 이번 기능의 실질적 게이트다 (GYE-296)
-- [ ] T068 spec.md의 SC-001~SC-011을 하나씩 대조해 미충족 항목이 없는지 확인하고 결과를 기록한다
+- [X] T068 spec.md의 SC-001~SC-011을 하나씩 대조해 미충족 항목이 없는지 확인하고 결과를 기록한다
 - [X] T069 `just fmt` → `just lint` → `just test`를 실행해 전부 green임을 확인하고, 변경 diff와 Conventional Commits 형식의 커밋 메시지를 사람에게 제시한다 (헌법 원칙 III·IV — **확인 없이 커밋하지 않는다**)
 
 ---
@@ -326,6 +339,29 @@ T010의 실패 출력은 커밋 메시지 본문이나 PR 설명에 인용해 SC
 
 US2(문서)·US3·US4의 나머지 태스크는 exported 심볼을 도입하지 않으므로 논리적 묶음 단위로
 자유롭게 커밋한다. 단 **어떤 커밋도 사람 확인 없이 만들지 않는다**(헌법 원칙 IV).
+
+---
+
+## Success Criteria 대조 기록 (T068, 2026-08-03)
+
+실측 환경과 수치는 research.md R9~R13 참조.
+
+| SC | 판정 | 근거 |
+| --- | --- | --- |
+| SC-001 상용 계정 0으로 검색 성공 | ✅ | `--provider=motis --geocoder=none` 설정으로 대표 질의 3종 성공 (R13) |
+| SC-002 외부 유료 호출 0건 | ✅ | 지오코더 미설정 상태에서 역명 6개가 MOTIS 내장 색인으로 해석됨 (R13) |
+| SC-003 문서만으로 구축 | ⚠️ | T043에서 독립 리뷰 에이전트로 검증·수정 완료(17건 중 16건 반영, 1건 실측 기각). 다만 "사람인 제3자" 조건은 미충족 |
+| SC-004 착수 전 자원 파악 | ✅ | docs/self-hosting.md §2에 실측표(55초 / 3.98 GiB / 1.5 GB) |
+| SC-005 두 진입점 제공자 불일치 0건 | ✅ | `newRouteFinder` 단일 경로 + T023 테스트 |
+| SC-006 사설망 호스트·포트 노출 0건 | ✅ | 엔진 정지 후 실제 출력에서 `localhost`·`8080` 0건 (R13) |
+| SC-007 대표 질의 집합 반환 | ✅ | 수도권·지방 광역시·도시 간 3종 전부 성공 (R13) |
+| SC-008 기존 테스트 무수정 통과 | ✅ | `just check` green, 기존 테스트 수정 없음 |
+| SC-009 출력 안내만으로 복구 | ✅ | 3개 신규 코드 모두 `docs` 링크 포함, 프로즈 3줄 실측 확인 |
+| SC-010 초기 설정 1회 | ✅ | T051·T052 테스트 |
+| SC-011 자체 호스팅·상용 동등 제시 | ✅ | README 제공자 표에서 대등 서술 |
+
+**미충족 1건**: SC-003은 T043(제3자 구축 검증)에 종속된다. 문서는 완성되었고 자체 수행한
+구축은 문서 절차만으로 성공했으나, "작성자가 아닌 사람"이라는 조건은 만족할 수 없다.
 
 ---
 

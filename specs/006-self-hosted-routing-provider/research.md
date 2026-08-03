@@ -285,15 +285,190 @@ ODsay 사용자가 업그레이드 직후 "연결할 수 없음"(존재하지 �
 
 ---
 
-## 미해결 항목 요약
+## 미해결 항목 — 전부 해소됨 (2026-08-03 실측)
 
-계획 진행을 막지 않지만 구현 중 실측·확인이 필요한 항목이다. `/speckit-tasks`가 이들을
-선행 작업으로 뽑아야 한다.
+계측 환경: macOS(darwin 25.5.0), Apple Silicon, 물리 RAM 16 GB. Docker 29.4.0,
+VM 할당 메모리 7.82 GB, 10 vCPU. MOTIS **2.11.0**, KTDB GTFS 전국 피드,
+Geofabrik `south-korea-latest.osm.pbf`(284 MB, 2026-08-02판).
 
-| # | 항목 | 차단하는 산출물 | 해소 방법 |
-| --- | --- | --- | --- |
-| U1 | MOTIS `config.yml` 실제 스키마 | `deploy/motis/compose.yaml` | 컨테이너 1회 기동 후 생성물 확인 |
-| U2 | 그래프 빌드 시간·RAM·디스크 실측치 | `docs/self-hosting.md` (FR-023) | 실제 빌드 1회 수행하며 계측 |
-| U3 | KTDB GTFS 공식 경로·갱신 주기·지역 커버리지 | `docs/self-hosting.md` (FR-022/024) | KTDB 포털 확인 + 피드 내용 검사 |
-| U4 | 만료된 타임테이블에서의 plan 응답 형태 | `no_route` hint 문구 (FR-016) | 과거 GTFS로 재현 후 응답 관찰 |
-| U5 | MOTIS geocode의 한국어 정류장명 매칭 품질 | 대표 질의 스모크 (SC-007) | 실데이터로 3개 대표 질의 실행 |
+| # | 항목 | 결과 |
+| --- | --- | --- |
+| U1 | MOTIS `config.yml` 실제 스키마 | **해소** → R9 |
+| U2 | 그래프 빌드 시간·RAM·디스크 | **해소** — 55초 / 최대 3.98 GiB / 1.5 GB → R10 |
+| U3 | KTDB GTFS 경로·갱신 주기·커버리지 | **해소** → R11 |
+| U4 | 만료 타임테이블에서의 plan 응답 | **해소** — HTTP 200 + 빈 결과(`no_route`) → R12 |
+| U5 | 한국어 정류장명 매칭 품질 | **해소** — 대표 질의 3종 전부 성공 → R13 |
+
+---
+
+## R9. MOTIS 이미지·CLI·`config.yml` 실측 (U1 해소)
+
+**이미지 태그**: 계획 단계에서 적어 둔 `v2.0.0`은 **존재하지 않는다**(`docker pull` 실패).
+도커 태그는 git 태그와 달리 `v` 접두사가 **없다** — git `v2.11.0` ↔ 이미지 `2.11.0`.
+최신 릴리스는 2.11.0(2026-07-31), 압축 해제 215 MB. 2.11.0의 breaking change는
+지도 타일 스키마·글리프 관련이라 naeryeo(geocode+plan)에는 영향이 없다.
+
+**이미지 구성**: `ENTRYPOINT=[]`, `CMD=[/motis server /data]`, `USER=motis`(uid 100).
+바이너리는 **`/motis`이며 PATH에 없다** — `command: ["motis", ...]`는
+"executable file not found in $PATH"로 실패한다.
+
+**서브커맨드**:
+
+```
+motis config [PATHS...]              # CWD에 config.yml 생성. 확장자로 판별:
+                                     #   ".osm.pbf" → OSM (street routing·geocoding·tiles)
+                                     #   그 외      → static timetable
+motis import -d <graph> -c <config>  # 전처리. import 후 원본 입력 불필요
+motis server -d <graph>              # graph 폴더만으로 기동
+```
+
+**`config.yml` 스키마**: `osm`, `timetable`(`first_day: TODAY`, `num_days: 365`,
+`datasets.<name>.path` 등), `elevators`, `street_routing`, `osr_footpath`,
+`geocoding`, `reverse_geocoding`, 그리고 `tiles`.
+
+**Decision**: 생성된 config를 그대로 쓰지 않고 **`deploy/motis/config.yml`을 체크인**한다.
+
+**Rationale**: `motis config`가 만드는 `tiles` 블록은 `db_size: 274877906944`(**256 GB**)
+스파이스 DB를 켜고, 프로파일 경로 `tiles-profiles/full.lua`를 **CWD 상대경로**로 적는데
+그 파일은 이미지의 `/tiles-profiles`에 있어 데이터 디렉터리에서 해석되지 않는다. naeryeo는
+타일을 전혀 호출하지 않으므로 이 블록을 제거하는 것이 곧 빌드 시간·디스크의 대부분을
+없애는 조치다. 또한 체크인해 두어야 몇 달 뒤 재빌드가 같은 그래프를 낸다 —
+`motis config`는 엔진 기본값을 따르고, 기본값은 움직인다.
+
+**부수 확인**: OSM 파일 없이 GTFS만 넣으면 생성 config가 `geocoding: false`가 되고
+`/api/v1/geocode`는 **404**를 반환한다. naeryeo는 모든 장소 이름을 이 엔드포인트로
+해석하므로 **OSM 파일은 선택이 아니다**.
+
+---
+
+## R10. 그래프 빌드 자원 실측 (U2 해소, spec FR-023)
+
+`tiles` 블록을 제거한 config 기준, 위 계측 환경에서 1회 측정:
+
+| 항목 | 실측값 |
+| --- | --- |
+| 입력 | OSM 284 MB + GTFS zip 211 MB (압축 해제 약 1.48 GB) |
+| 소요 시간 | **55초** |
+| 최대 메모리 | **3.98 GiB** (3초 간격 `docker stats` 폴링 최대치) |
+| 결과 디스크 | **1.5 GB** (`osr` 642 MB, `adr` 343 MB, `tt.bin` 280 MB, `way_matches.bin` 143 MB 등) |
+
+import 태스크는 `osr`·`tt`·`adr`·`adr_extend`·`matches` 5개가 돌며, 시간의 대부분을
+`osr`(도로망)이 쓴다. import 후 원본 osm.pbf·GTFS zip은 삭제해도 서버가 뜬다(약 500 MB 회수).
+
+**주의**: 이 수치는 `tiles`를 끈 경우다. 생성된 기본 config를 그대로 쓰면 타일 빌드가
+추가되어 시간·디스크가 전혀 다른 규모가 된다.
+
+---
+
+## R11. KTDB GTFS 실측 (U3 해소)
+
+**공식 경로(1순위)**: 공지 "(안내) 2023년 3월 기준 GTFS 기반정보 제공 안내"
+(2025-05-12 게시, 2025-05-30 제공 개시).
+신청 경로는 국가교통DB 홈페이지 > 정보공개 > 자료신청 > 교통분석자료 신청 >
+교통망 GIS DB > 대중교통 > 대중교통. **직접 다운로드 링크가 아니라 자료신청 절차**이며
+이용자 만족도 조사 후 내려받는다.
+
+**갱신 주기**: **명시 없음**. 공지에 "파일럿 자료"로 표기. 기준 시점은 **2023년 3월**.
+
+**미러(2순위, 참고)**: Transitous `feeds/kr.json`의 유일한 한국 피드는 개인
+유지관리자의 Dropbox 공유 링크다. 2026-08-03 기준 살아 있음(211 MB). R7의 결론대로
+문서는 KTDB 원본을 1순위로 안내하고 이 링크는 참고로만 둔다.
+
+**피드 내용**: 파일 **6개뿐** — `agency.txt`, `calendar.txt`, `routes.txt`,
+`stop_times.txt`(1.51 GB), `stops.txt`, `trips.txt`.
+`calendar_dates.txt`·`shapes.txt`·`transfers.txt` **없음** → 공휴일 예외·노선 형상·환승
+규칙이 없다. agency는 `A1,KTDB` 하나.
+레코드 수: routes 26,991 / stops 209,628 / trips 347,567.
+
+**`route_type`이 GTFS 표준과 어긋난다**: 24,581개가 `0`(표준상 트램)인데 실제로는
+시내·마을버스이고, `7`(표준상 푸니쿨라)은 항공 국내선이다. 실제 질의에서 KTX/SRT가
+`AERIAL_LIFT`(type 6), 제주 시내버스가 `TRAM`(0)·`FUNICULAR`(5)로 보고되는 것을 확인했다.
+
+`describeLeg`는 `isBus()`(=`BUS`/`COACH`/`TROLLEYBUS`)일 때만 수단 이름을 붙이고 그 외에는
+전부 "N 승차"로 렌더한다. 따라서 **영향을 받는 것은 KTX가 아니라 실제 시내버스다** —
+지하철·철도는 원래도 수단 이름 없이 노선명만 쓰므로 달라지는 것이 없고, 버스로 표기되지
+않은 버스만 "6900 버스 승차"가 아니라 "6900 승차"가 된다. 문구가 덜 구체적일 뿐 출력이
+깨지지는 않으며, 노선명은 모든 경우에 정확하다.
+
+---
+
+## R12. 만료 타임테이블에서의 응답 (U4 해소)
+
+두 가지를 구분해 실측했다.
+
+**(가) 과거 날짜만 있는 타임테이블** — `calendar.txt`가 `20200101~20201231`뿐인 최소
+GTFS를 만들어 import·질의:
+
+- `motis import`가 **경고 없이 성공한다**. 운행일이 하나도 없다는 신호를 주지 않는다.
+- `plan`은 **HTTP 200 + `itineraries: []` + `direct: []`** 를 반환한다.
+- → naeryeo는 이를 `core.ErrNoRoute` → **`no_route`** 로 분류한다.
+
+**(나) 적재 범위 밖 질의 시각** — `first_day: TODAY`, `num_days: 365`이므로 창 밖 시각은:
+
+```
+HTTP 400
+{"error":"query time 2027-12-01 09:00 is outside of loaded timetable window
+          [2026-08-02 00:00, 2027-08-03 00:00["}
+```
+
+- → naeryeo는 4xx를 `*core.ErrMotisRejected{Status:400}` → **`motis_rejected`** 로 분류한다.
+
+**Decision**: FR-016의 "시간표 최신 여부 확인" 힌트는 **`no_route`** 에 붙이는 것이 맞다.
+(가)가 실사용자가 만나는 형태이고, 실패가 조용하기 때문이다.
+
+**이번 KTDB 피드에는 (가)가 해당하지 않는다**. `calendar.txt`가
+`B1,1,1,1,1,1,1,1,20170101,20301231` 단 한 줄 — 서비스 1개가 **2030년까지 매일** 운행으로
+선언돼 있다. 따라서 시간표는 만료되지 않으며 오늘 날짜 질의가 정상 동작한다.
+**그러나 시각표 내용은 2023년 3월 기준**이다. 즉 이 피드의 실제 위험은 `no_route`가 아니라
+**3년 전 시각표를 오늘의 답으로 조용히 제시하는 것**이다. 실패보다 나쁜 실패 모드이므로
+코드가 아니라 문서(FR-024)가 다뤄야 한다. 부작용으로 평일/주말·공휴일 구분도 없다.
+
+---
+
+## R13. 대표 질의 3종 (U5 해소, SC-007)
+
+**지오코딩**: 강남역·홍대입구역·서면역·해운대역·대전역·광주송정역 6개 모두
+**첫 매치가 정확한 `type=STOP`** 이었다. Kakao 없이 MOTIS 내장 색인만으로 해석된다
+(SC-002 실증).
+
+**범위가 R4의 예상보다 넓다 — 후속 기능의 전제가 바뀐다.** R4는 "건물명·주소 검색에서
+Kakao를 MOTIS geocode로 대체"를 후속 과제로 남겼으나, `--geocoder=none` 상태에서 실측한
+결과 **이미 동작한다**:
+
+| 입력 | MOTIS 응답 | 결과 |
+| --- | --- | --- |
+| `아이디스 타워` | `type=PLACE` | `아이디스 타워 → 수지구청` 51분 경로 성공 |
+| `테헤란로 152` | `type=ADDRESS` | `테헤란로 152 → 강남역` 11분 경로 성공 |
+
+`osm.pbf`가 도로망뿐 아니라 건물·장소·주소까지 색인하기 때문이다(R4가 인용한 README 서술이
+실제로 이 범위였다). 따라서 Kakao는 **기능을 여는 스위치가 아니라 MOTIS 색인에 없는 이름을
+위한 적중률 보완**이다 — `internal/motis/client.go`의 `resolvePlace`가 MOTIS 결과가 있으면
+거기서 반환하고 `c.Geocoder`를 아예 호출하지 않는 구조가 이를 뒷받침한다.
+
+이 사실을 놓친 채 작성한 `docs/self-hosting.md` §7과 `README.md`의 "건물명·주소는 Kakao 키를
+등록한 경우에만 동작합니다" 서술은 **거짓이었고 수정했다**. 자체 호스팅의 가치 주장이
+실제보다 약하게 적혀 있던 셈이다.
+
+**경로 검색** — 실제 `naeryeo route` CLI, 상용 API 키 없음:
+
+| 질의 | 결과 |
+| --- | --- |
+| 강남역 → 홍대입구역 (수도권 도시철도) | 약 47분, 환승 0회, 서울2호선 |
+| 서면역 → 해운대역 (지방 광역시) | 약 33분, 환승 0회, 부산2호선 |
+| 대전역 → 광주송정역 (도시 간) | 약 93분, 환승 1회, KTX 경부선 + SRT 호남선 |
+
+세 질의 모두 성공 — **커버리지 한계로 문서에 적을 실패 질의가 없다**.
+요금은 세 결과 모두 부재해 `FareKnown=false` → 프로즈 `요금 정보 없음`,
+JSON에서 `fareWon` 키 **부재**를 실측 확인했다(FR-010/FR-011).
+
+**발견·수정된 출력 결함**: 여정의 양 끝 지점명이 MOTIS의 리터럴 `START`/`END`로 내려와
+한국어 문구에 그대로 새어 나왔다 — "START에서 강남까지 도보 이동 (8분)". 테스트 픽스처는
+모든 지점에 이름을 주므로 실엔진 검증에서만 드러났고, ODsay 경로에는 없던 현상이다.
+`placeName()`으로 각각 `출발지`/`도착지`로 렌더하도록 고쳤다(테이블 테스트 4건 추가).
+
+**소요 시간의 변동**: 도시 간 질의는 같은 날에도 질의 시각에 따라 93분~159분으로 갈렸다.
+연결편 선택이 달라지기 때문이며 정상이다. 문서의 완료 판정 기준을 분 단위가 아니라
+"경로가 나오는가"로 둔 이유다.
+
+**실패 경로 실증**(엔진 정지 후): `motis_unavailable` 코드, `docs` 링크 포함,
+프로즈 3줄(message/hint/docs), 출력 전체에 `localhost`·`8080` **0건**(SC-006).
