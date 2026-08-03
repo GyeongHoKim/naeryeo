@@ -228,7 +228,8 @@ description: "Task list for 006-self-hosted-routing-provider"
 - [X] T064 [P] `specs/005-structured-output-contract/contracts/error-codes.md`의 "향후 확장" 절(`:70-75`)을 갱신해 `provider_not_configured`·`motis_*`·`docs`가 실현되었음을 명시하고 이 기능의 contracts/error-codes.md를 가리키게 한다
 - [X] T065 provider × geocoder 4개 조합(motis×none, motis×kakao, odsay×none, odsay×kakao)이 모두 동작함을 검증하는 테스트를 추가한다 — 특히 **motis×none에서 역·정류장 이름 검색이 외부 호출 없이 동작**하는 것이 이 기능의 핵심 주장이다 (spec FR-030, SC-002, quickstart.md S6). 4개 조합 모두에 **동일한 인자**(`--from`, `--to`)를 주어 호출하고, 호출 형태가 제공자에 따라 달라지지 않음을 단언한다 (spec FR-012)
 - [X] T066 quickstart.md S2를 수행한다 — 실 MOTIS로 대표 질의 3종(강남역→홍대입구역, 서면역→해운대역, 대전역→광주송정역)을 실행하고 결과를 기록한다. 실패하는 질의가 있으면 커버리지 한계로 `docs/self-hosting.md`에 명시한다 (spec SC-007, research.md U5 해소)
-- [ ] T067 3개 OS(linux/macOS/windows) CI에서 `just check`가 전부 green임을 확인한다 — 설정 파일 경로가 OS별로 갈리므로 이 매트릭스가 이번 기능의 실질적 게이트다 (GYE-296)
+- [X] T067 3개 OS(linux/macOS/windows) CI에서 `just check`가 전부 green임을 확인한다 — 설정 파일 경로가 OS별로 갈리므로 이 매트릭스가 이번 기능의 실질적 게이트다 (GYE-296)
+  - PR #12, 워크플로 실행 30799925162에서 확인: ubuntu-latest 1m16s / macos-latest 1m4s / windows-latest 2m19s **전부 pass**. `os.UserConfigDir()`가 OS마다 다른 경로를 주는데도 `internal/config` 테스트가 세 곳 모두에서 통과했다.
 - [X] T068 spec.md의 SC-001~SC-011을 하나씩 대조해 미충족 항목이 없는지 확인하고 결과를 기록한다
 - [X] T069 `just fmt` → `just lint` → `just test`를 실행해 전부 green임을 확인하고, 변경 diff와 Conventional Commits 형식의 커밋 메시지를 사람에게 제시한다 (헌법 원칙 III·IV — **확인 없이 커밋하지 않는다**)
 
