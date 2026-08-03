@@ -1,0 +1,68 @@
+# MOTIS import configuration for naeryeo.
+#
+# Generated once with `motis config <osm.pbf> <gtfs.zip>` against MOTIS 2.11.0
+# and then trimmed for this use case. It is checked in rather than regenerated
+# so that a rebuild months from now produces the same graph from the same
+# inputs — `motis config` follows the engine's defaults, and those move.
+#
+# Two deliberate differences from what `motis config` emits:
+#
+#  1. No `tiles:` block. The generated one enables vector map tiles with a
+#     256 GB (274877906944 B) sparse database and points at a profile path that
+#     does not resolve from the data directory. naeryeo only calls /api/v1/geocode
+#     and /api/v6/plan, so tile generation is pure cost — dropping it is what
+#     makes the build finish in about a minute.
+#
+#  2. Input filenames are fixed. Name your downloads to match, or edit the two
+#     paths below; see docs/self-hosting.md section 3.
+#
+# `first_day: TODAY` with `num_days: 365` means the graph covers one year from
+# whenever you run the import — not from whenever the feed was published. A
+# query outside that window is rejected with HTTP 400, so re-import when the
+# window runs short.
+
+osm: south-korea-latest.osm.pbf
+
+timetable:
+  first_day: TODAY
+  num_days: 365
+  tb: false
+  railviz: true
+  with_shapes: true
+  adjust_footpaths: true
+  merge_dupes_intra_src: false
+  merge_dupes_inter_src: false
+  link_stop_distance: 100
+  update_interval: 60
+  http_timeout: 30
+  canned_rt: false
+  incremental_rt_update: false
+  extend_missing_footpaths: false
+  max_footpath_length: 15
+  default_transfer_time: 2
+  max_matching_distance: 25.000000
+  preprocess_max_matching_distance: 250.000000
+  datasets:
+    ktdb-gtfs:
+      path: ktdb-gtfs.zip
+      extend_calendar: false
+      default_bikes_allowed: false
+      default_cars_allowed: false
+      default_reservation_not_required: true
+      clasz_reservation_not_required:
+        AIR: false
+        COACH: false
+        NIGHT: false
+        ODM: false
+        RIDESHARING: false
+
+elevators: false
+
+# Street routing and geocoding both come from the OSM extract. Without it the
+# engine still plans transit trips between coordinates, but /api/v1/geocode
+# returns 404 — and naeryeo resolves every place name through that endpoint, so
+# the OSM file is not optional here.
+street_routing: true
+osr_footpath: false
+geocoding: true
+reverse_geocoding: true
